@@ -1,0 +1,94 @@
+name: StayEase CI
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r backend/requirements.txt
+      - name: Create backend .env from secrets
+        run: |
+          cat > backend/.env << EOF
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          MONGO_DB_NAME=stayease_test
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM=${{ secrets.MAIL_FROM }}
+          MAIL_SERVER=smtp.gmail.com
+          MAIL_PORT=587
+          MAIL_USE_TLS=True
+          TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+          CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+          OPEN_METEO_BASE_URL=https://api.open-meteo.com
+          GST_RATE=0.18
+          GST_NUMBER=TEST_GST
+          FRONTEND_URL=http://localhost:5173
+          APP_NAME=StayEase
+          APP_HOST=0.0.0.0
+          APP_PORT=8000
+          ALLOWED_ORIGINS=http://localhost:5173
+          EOF
+        env:
+          MONGO_URI: mongodb://localhost:27017
+          JWT_SECRET: ci-test-secret
+          MAIL_USERNAME: ''
+          MAIL_PASSWORD: ''
+          MAIL_FROM: test@stayease.com
+          TWILIO_ACCOUNT_SID: ''
+          TWILIO_AUTH_TOKEN: ''
+          CLOUDINARY_CLOUD_NAME: ''
+          CLOUDINARY_API_KEY: ''
+          CLOUDINARY_API_SECRET: ''
+      - run: cd backend && pytest tests/ -v --cov=. --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm ci
+      - name: Create frontend .env
+        run: |
+          echo "VITE_API_BASE_URL=http://localhost:8000" > frontend/.env
+          echo "VITE_APP_NAME=StayEase" >> frontend/.env
+      - run: cd frontend && npm run test -- --run
+      - run: cd frontend && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install black flake8
+      - run: black --check backend/
+      - run: flake8 backend/ --max-line-length=100 --exclude=tests,venv,.venv
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm ci
+      - run: cd frontend && npx eslint src/ --ext .js,.jsx

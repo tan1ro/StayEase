@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 144" role="img">
+  <title>StayEase</title>
+  <desc>StayEase hotel booking logo</desc>
+  <g transform="translate(54, 79) scale(0.76) translate(-170, -122.5)">
+    <rect x="120" y="80" width="100" height="100" rx="4" fill="#1A6BFF"/>
+    <rect x="110" y="62" width="120" height="24" rx="4" fill="#0F4FCC"/>
+    <rect x="133" y="96" width="22" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="165" y="96" width="22" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="197" y="96" width="12" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="133" y="124" width="22" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="165" y="124" width="22" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="197" y="124" width="12" height="18" rx="2" fill="#E8F0FF"/>
+    <rect x="155" y="148" width="30" height="32" rx="3" fill="#0F4FCC"/>
+    <circle cx="181" cy="165" r="3" fill="#E8F0FF"/>
+    <rect x="145" y="178" width="50" height="5" rx="1" fill="#0F4FCC"/>
+    <rect x="138" y="181" width="64" height="4" rx="1" fill="#D1E0FF"/>
+    <rect x="100" y="183" width="140" height="2" rx="1" fill="#D1E0FF"/>
+  </g>
+  <g>
+    <circle cx="128" cy="34" r="4" fill="#1A6BFF"/>
+    <circle cx="143" cy="34" r="4" fill="#D1E0FF"/>
+    <circle cx="158" cy="34" r="4" fill="#D1E0FF"/>
+    <text x="128" y="96" font-family="Inter, system-ui, sans-serif" font-size="66" font-weight="800" fill="#1A6BFF">StayEase</text>
+    <text x="128" y="124" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="500" fill="#4A5568" letter-spacing="0.08em">SMART HOTEL MANAGEMENT</text>
+  </g>
+</svg>

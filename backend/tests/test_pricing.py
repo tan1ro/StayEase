@@ -1,0 +1,136 @@
+from datetime import date, timedelta
+
+from services.gst import calculate_gst
+from services.pricing import calculate_dynamic_pricing
+
+
+def test_weekend_surcharge_applied():
+  # 2025-06-13 is Friday, 2025-06-15 is Sunday -> includes Fri+Sat
+    result = calculate_dynamic_pricing(
+        base_price=1000.0,
+        check_in=date(2025, 6, 13),
+        check_out=date(2025, 6, 15),
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Weekend surcharge" in labels
+
+
+def test_peak_month_surcharge():
+    result = calculate_dynamic_pricing(
+        base_price=1000.0,
+        check_in=date(2025, 12, 10),
+        check_out=date(2025, 12, 12),
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Peak season surcharge" in labels
+
+
+def test_long_stay_discount():
+    result = calculate_dynamic_pricing(
+        base_price=1000.0,
+        check_in=date(2025, 7, 1),
+        check_out=date(2025, 7, 10),
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Long stay discount" in labels
+
+
+def test_last_minute_surcharge():
+    today = date.today()
+    result = calculate_dynamic_pricing(
+        base_price=1000.0,
+        check_in=today + timedelta(days=1),
+        check_out=today + timedelta(days=3),
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Last minute surcharge" in labels
+
+
+def test_early_bird_discount():
+    result = calculate_dynamic_pricing(
+        base_price=1000.0,
+        check_in=date.today() + timedelta(days=45),
+        check_out=date.today() + timedelta(days=47),
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Early bird discount" in labels
+
+
+def test_gst_rate_below_1000():
+    gst = calculate_gst(950.0, 2)
+    assert gst["gst_rate"] == 0.0
+
+
+def test_gst_rate_1000_to_7500():
+    gst = calculate_gst(3500.0, 2)
+    assert gst["gst_rate"] == 0.12
+
+
+def test_gst_rate_above_7500():
+    gst = calculate_gst(8500.0, 1)
+    assert gst["gst_rate"] == 0.18
+
+
+def test_offer_code_discount_applied():
+    offer = {"code": "TEST10", "type": "percentage", "value": 10, "max_discount": 500}
+    result = calculate_dynamic_pricing(
+        base_price=2000.0,
+        check_in=date(2025, 7, 1),
+        check_out=date(2025, 7, 3),
+        offer=offer,
+    )
+    assert result["discount_amount"] > 0
+
+
+def test_platform_fees_applied():
+    result = calculate_dynamic_pricing(
+        base_price=2000.0,
+        check_in=date(2025, 7, 1),
+        check_out=date(2025, 7, 3),
+    )
+    assert result["guest_platform_fee"] == round(result["subtotal"] * 0.10, 2)
+    assert result["host_platform_fee"] == round(result["subtotal"] * 0.03, 2)
+    assert result["host_payout"] == round(result["subtotal"] - result["host_platform_fee"], 2)
+    assert result["total_price"] == round(result["subtotal"] + result["gst_amount"] + result["guest_platform_fee"], 2)
+    fee_labels = [i["label"] for i in result["price_breakdown"] if i["type"] == "fee"]
+    assert "StayEase service fee" in fee_labels
+
+
+async def test_expired_offer_rejected(client, seed_data, mock_db):
+    await mock_db["offers"].insert_one(
+        {
+            "code": "EXPIRED",
+            "type": "percentage",
+            "value": 10,
+            "max_discount": 100,
+            "valid_from": "2020-01-01",
+            "valid_until": "2020-12-31",
+            "usage_limit": 10,
+            "used_count": 0,
+            "is_active": True,
+            "applicable_rooms": [],
+        }
+    )
+    res = await client.post(
+        "/api/pricing/calculate",
+        json={
+            "room_id": seed_data["room1_id"],
+            "check_in": (date.today() + timedelta(days=5)).isoformat(),
+            "check_out": (date.today() + timedelta(days=7)).isoformat(),
+            "offer_code": "EXPIRED",
+        },
+    )
+    assert res.status_code == 422
+
+
+async def test_invalid_offer_code_rejected(client, seed_data):
+    res = await client.post(
+        "/api/pricing/calculate",
+        json={
+            "room_id": seed_data["room1_id"],
+            "check_in": (date.today() + timedelta(days=5)).isoformat(),
+            "check_out": (date.today() + timedelta(days=7)).isoformat(),
+            "offer_code": "NOPE",
+        },
+    )
+    assert res.status_code == 422

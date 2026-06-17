@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #F7F9FC; color: #0D1B3E; margin: 0; padding: 24px; }
+    .card { background: #fff; border-radius: 16px; padding: 32px; max-width: 600px; margin: 0 auto; }
+    h1 { color: #1A6BFF; }
+    .code { font-size: 28px; font-weight: 700; color: #1A6BFF; letter-spacing: 2px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Special Offer</h1>
+    <p>Use code <span class="code">{{ offer.code }}</span> on your next booking.</p>
+    <p>Valid until {{ offer.valid_until }}.</p>
+  </div>
+</body>
+</html>

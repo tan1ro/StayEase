@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #F7F9FC; color: #0D1B3E; margin: 0; padding: 24px; }
+    .card { background: #fff; border-radius: 16px; padding: 32px; max-width: 600px; margin: 0 auto; }
+    h1 { color: #FF385C; font-size: 22px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    td { padding: 8px 0; border-bottom: 1px solid #EBEBEB; }
+    .label { color: #717171; }
+    .refund { color: #00A699; font-weight: 600; }
+    .charge { color: #FF385C; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Booking Cancelled</h1>
+    <p>Your booking ({{ booking.check_in_date }} to {{ booking.check_out_date }}) has been cancelled.</p>
+    <p>{{ cancellation.reason }}</p>
+    <table>
+      <tr><td class="label">Original total</td><td>INR {{ cancellation.total_price }}</td></tr>
+      <tr><td class="label">Cancellation charge</td><td class="charge">INR {{ cancellation.cancellation_charge }}</td></tr>
+      <tr><td class="label">Refund amount</td><td class="refund">INR {{ cancellation.refund_amount }}</td></tr>
+    </table>
+    <p>Refunds are processed within 5–7 business days to your original payment method.</p>
+    <p>Policy: {{ cancellation.cancellation_policy }} — <a href="{{ FRONTEND_URL }}/terms#cancellation">View terms</a></p>
+  </div>
+</body>
+</html>

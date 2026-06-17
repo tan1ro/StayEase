@@ -1,0 +1,14 @@
+name: StayEase Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy backend
+        run: echo "Add your backend deployment command here (e.g. Railway, Render, EC2)"
+      - name: Deploy frontend
+        run: echo "Add your frontend deployment command here (e.g. Vercel, Netlify, S3)"

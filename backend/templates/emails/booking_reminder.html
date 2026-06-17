@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #F7F9FC; color: #0D1B3E; margin: 0; padding: 24px; }
+    .card { background: #fff; border-radius: 16px; padding: 32px; max-width: 600px; margin: 0 auto; }
+    h1 { color: #1A6BFF; font-size: 22px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Upcoming Stay Reminder</h1>
+    <p>Your check-in at StayEase is in <strong>{{ days }}</strong> day(s).</p>
+    <p>Check-in: {{ booking.check_in_date }} | Check-out: {{ booking.check_out_date }}</p>
+    <p>We look forward to hosting you.</p>
+  </div>
+</body>
+</html>

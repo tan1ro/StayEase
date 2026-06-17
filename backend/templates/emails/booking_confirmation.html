@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #F7F9FC; color: #0D1B3E; margin: 0; padding: 24px; }
+    .card { background: #fff; border-radius: 16px; padding: 32px; max-width: 600px; margin: 0 auto; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    h1 { color: #1A6BFF; font-size: 24px; margin: 0 0 16px; }
+    .btn { display: inline-block; background: #1A6BFF; color: #fff; padding: 12px 24px; border-radius: 50px; text-decoration: none; font-weight: 600; margin-top: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    td { padding: 8px 0; border-bottom: 1px solid #EBEBEB; }
+    .label { color: #717171; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Booking Confirmed</h1>
+    <p>Hi {{ booking.guest_name }}, your stay at <strong>{{ room.title }}</strong> is confirmed.</p>
+    <table>
+      <tr><td class="label">Room</td><td>{{ room.room_number }} - {{ room.title }}</td></tr>
+      <tr><td class="label">Check-in</td><td>{{ booking.check_in_date }}</td></tr>
+      <tr><td class="label">Check-out</td><td>{{ booking.check_out_date }}</td></tr>
+      <tr><td class="label">Guests</td><td>{{ booking.num_guests }}</td></tr>
+      <tr><td class="label">Room subtotal</td><td>INR {{ booking.subtotal }}</td></tr>
+      {% if booking.guest_platform_fee %}
+      <tr><td class="label">StayEase service fee</td><td>INR {{ booking.guest_platform_fee }}</td></tr>
+      {% endif %}
+      {% if booking.gst_amount %}
+      <tr><td class="label">GST</td><td>INR {{ booking.gst_amount }}</td></tr>
+      {% endif %}
+      <tr><td class="label">Total paid</td><td>INR {{ booking.total_price }}</td></tr>
+    </table>
+    {% if booking.check_in_verification %}
+    <p style="margin-top: 16px; padding: 12px; background: #E8F0FF; border-radius: 8px; font-size: 14px;">
+      <strong>Check-in:</strong> {{ booking.check_in_verification.check_in_note }}
+    </p>
+    {% endif %}
+    <a class="btn" href="{{ FRONTEND_URL }}/bookings">View My Trips</a>
+  </div>
+</body>
+</html>
