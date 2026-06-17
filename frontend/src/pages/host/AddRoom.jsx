@@ -124,6 +124,7 @@ const WIZARD_STEPS = [
   { id: 'place-type', section: 0 },
   { id: 'location', section: 0 },
   { id: 'basics', section: 0 },
+  { id: 'bathrooms', section: 0 },
   { id: 'who-else', section: 0 },
   { id: 'intro-2', section: 1 },
   { id: 'amenities', section: 1 },
@@ -373,25 +374,32 @@ function BasicsStep({ form, set, showLockQuestion }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="listing-wizard__bathroom-section">
-        <h2 className="listing-wizard__lock-title">What kind of bathrooms are available to guests?</h2>
-        <div className="listing-wizard__bathroom-list">
-          {BATHROOM_TYPES.map((bathroomType) => (
-            <BathroomTypeRow
-              key={bathroomType.id}
-              label={bathroomType.label}
-              description={bathroomType.description}
-              countLabel={bathroomType.countLabel}
-              value={form[bathroomType.id] || 0}
-              onChange={(v) => set(bathroomType.id, v)}
-            />
-          ))}
-        </div>
-        {totalBathrooms(form) < 1 && (
-          <p className="listing-wizard__bathroom-hint">Add at least one bathroom to continue.</p>
-        )}
+function BathroomsStep({ form, set }) {
+  return (
+    <div className="listing-wizard__step listing-wizard__step--narrow">
+      <h1 className="listing-wizard__title">What kind of bathrooms are available to guests?</h1>
+      <p className="listing-wizard__subtitle">
+        Guests need to know whether the bathroom is private, dedicated, or shared.
+      </p>
+      <div className="listing-wizard__bathroom-list">
+        {BATHROOM_TYPES.map((bathroomType) => (
+          <BathroomTypeRow
+            key={bathroomType.id}
+            label={bathroomType.label}
+            description={bathroomType.description}
+            countLabel={bathroomType.countLabel}
+            value={form[bathroomType.id] || 0}
+            onChange={(v) => set(bathroomType.id, v)}
+          />
+        ))}
       </div>
+      {totalBathrooms(form) < 1 && (
+        <p className="listing-wizard__bathroom-hint">Add at least one bathroom to continue.</p>
+      )}
     </div>
   );
 }
@@ -541,9 +549,10 @@ function ListingWizard({ initial = defaultForm }) {
       case 'pricing-gst':
         return form.price_per_night >= 100;
       case 'basics':
-        if (totalBathrooms(form) < 1) return false;
         if (form.place_type === 'shared') return true;
         return form.bedroom_has_lock === true || form.bedroom_has_lock === false;
+      case 'bathrooms':
+        return totalBathrooms(form) >= 1;
       case 'who-else': {
         const options = whoElseOptionsForListing(form.place_type, form.room_category);
         if (options.length === 0) return true;
@@ -662,6 +671,13 @@ function ListingWizard({ initial = defaultForm }) {
             form={form}
             set={set}
             showLockQuestion={form.place_type !== 'shared'}
+          />
+        );
+      case 'bathrooms':
+        return (
+          <BathroomsStep
+            form={form}
+            set={set}
           />
         );
       case 'who-else':
