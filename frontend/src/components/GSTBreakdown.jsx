@@ -1,10 +1,9 @@
 import { formatCurrency } from '../api/api';
+import { getHotelGstRate } from '../constants/hotelGstSlabs';
 
 export function calculateGST(pricePerNight, nights) {
   const subtotal = pricePerNight * nights;
-  let rate = 0;
-  if (pricePerNight >= 1000 && pricePerNight <= 7500) rate = 0.12;
-  else if (pricePerNight > 7500) rate = 0.18;
+  const rate = getHotelGstRate(pricePerNight);
 
   const gst = subtotal * rate;
   const half = gst / 2;

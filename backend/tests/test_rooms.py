@@ -150,6 +150,39 @@ async def test_upload_room_photo(client, host_token, seed_data, monkeypatch):
     assert res.status_code == 200
 
 
+async def test_delete_room_photo_with_folder_public_id(client, host_token, seed_data, monkeypatch):
+    public_id = "stayease/images/sample-photo"
+
+    async def mock_upload(file):
+        return {"url": "https://example.com/photo.jpg", "public_id": public_id}
+
+    monkeypatch.setattr("routes.rooms.upload_image", mock_upload)
+    files = {"file": ("test.jpg", b"fake-image", "image/jpeg")}
+    upload_res = await client.post(
+        f"/api/rooms/{seed_data['room1_id']}/photos",
+        headers={"Authorization": f"Bearer {host_token}"},
+        files=files,
+    )
+    assert upload_res.status_code == 200
+
+    deleted = []
+
+    def mock_delete(pid, resource_type="image"):
+        deleted.append((pid, resource_type))
+
+    monkeypatch.setattr("routes.rooms.delete_asset", mock_delete)
+
+    res = await client.delete(
+        f"/api/rooms/{seed_data['room1_id']}/photos/{public_id}",
+        headers={"Authorization": f"Bearer {host_token}"},
+    )
+    assert res.status_code == 200
+    assert deleted == [(public_id, "image")]
+
+    room = await client.get(f"/api/rooms/{seed_data['room1_id']}")
+    assert room.json().get("photos") == []
+
+
 async def test_filter_rooms_by_nearby_coordinates(client, seed_data):
     res = await client.get(
         "/api/rooms",

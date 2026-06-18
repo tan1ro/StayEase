@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import Modal from './Modal';
 import ReviewCard from './ReviewCard';
@@ -96,7 +97,12 @@ export function MessageHostModal({ open, onClose, roomId, hostName, onSuccess })
       {sent ? (
         <div className="listing-modal__success">
           <p>Your message was sent to {hostName}. They typically respond within an hour.</p>
-          <button type="button" className="btn btn-primary" onClick={handleClose}>Done</button>
+          <div className="listing-modal__success-actions">
+            <Link to="/messages" className="btn btn-primary" onClick={handleClose}>
+              View your messages
+            </Link>
+            <button type="button" className="btn btn-ghost" onClick={handleClose}>Done</button>
+          </div>
         </div>
       ) : (
         <form className="listing-modal__form" onSubmit={handleSubmit}>

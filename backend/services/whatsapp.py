@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from twilio.rest import Client
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _client() -> Client | None:
@@ -16,12 +20,16 @@ def send_whatsapp(to_phone: str, body: str) -> bool:
     if client is None:
         return False
     to = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
-    client.messages.create(
-        from_=settings.TWILIO_WHATSAPP_FROM,
-        to=f"whatsapp:{to}",
-        body=body,
-    )
-    return True
+    try:
+        client.messages.create(
+            from_=settings.TWILIO_WHATSAPP_FROM,
+            to=f"whatsapp:{to}",
+            body=body,
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Failed to send WhatsApp to %s: %s", to_phone, exc)
+        return False
 
 
 def booking_confirmation_message(booking: dict, room: dict) -> str:

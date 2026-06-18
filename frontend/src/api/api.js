@@ -1,7 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOKEN_KEY = 'stayease_token';
+const USER_KEY = 'stayease_user';
+
+export { API_BASE_URL, TOKEN_KEY, USER_KEY };
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,7 +13,7 @@ export const api = axios.create({
 });
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem('stayease-token');
 }
 
 export function setToken(token) {
@@ -19,6 +22,28 @@ export function setToken(token) {
   } else {
     localStorage.removeItem(TOKEN_KEY);
   }
+}
+
+export function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(user) {
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
+}
+
+export function clearAuthStorage() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
 export function normalizeError(error) {
@@ -68,9 +93,9 @@ api.interceptors.response.use(
     error.normalized = normalized;
 
     if (normalized.status === 401 && !error.config?.skipAuthRedirect) {
-      setToken(null);
+      clearAuthStorage();
       if (!window.location.pathname.startsWith('/login')) {
-        window.dispatchEvent(new CustomEvent('stayease:unauthorized'));
+        window.location.href = '/login';
       }
     }
 
@@ -97,6 +122,7 @@ export const authApi = {
 export const roomsApi = {
   list: (params) => api.get('/api/rooms', { params }),
   get: (id) => api.get(`/api/rooms/${id}`),
+  alternatives: (id, params) => api.get(`/api/rooms/${id}/alternatives`, { params }),
   create: (data) => api.post('/api/rooms', data),
   update: (id, data) => api.patch(`/api/rooms/${id}`, data),
   remove: (id) => api.delete(`/api/rooms/${id}`),
@@ -110,8 +136,9 @@ export const roomsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  deletePhoto: (id, pid) => api.delete(`/api/rooms/${id}/photos/${pid}`),
-  setPrimaryPhoto: (id, pid) => api.patch(`/api/rooms/${id}/photos/${pid}/primary`),
+  deletePhoto: (id, pid) => api.delete(`/api/rooms/${id}/photos/${encodeURIComponent(pid)}`),
+  setPrimaryPhoto: (id, pid) => api.patch(`/api/rooms/${id}/photos/${encodeURIComponent(pid)}/primary`),
+  reorderPhotos: (id, publicIds) => api.patch(`/api/rooms/${id}/photos/reorder`, { public_ids: publicIds }),
   uploadVideo: (id, file) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -119,9 +146,10 @@ export const roomsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  deleteVideo: (id, vid) => api.delete(`/api/rooms/${id}/videos/${vid}`),
+  deleteVideo: (id, vid) => api.delete(`/api/rooms/${id}/videos/${encodeURIComponent(vid)}`),
   sendInquiry: (id, data) => api.post(`/api/rooms/${id}/inquiries`, data),
   report: (id, data) => api.post(`/api/rooms/${id}/reports`, data),
+  bookedDates: (id) => api.get(`/api/rooms/${id}/booked-dates`),
 };
 
 export const bookingsApi = {
@@ -146,6 +174,7 @@ export const bookingsApi = {
 export const reviewsApi = {
   create: (data) => api.post('/api/reviews', data),
   byRoom: (roomId) => api.get(`/api/reviews/room/${roomId}`),
+  byProperty: (roomId) => api.get(`/api/reviews/property/${roomId}`),
   byBooking: (bookingId) => api.get(`/api/reviews/booking/${bookingId}`),
   eligibleForRoom: (roomId) => api.get(`/api/reviews/eligible/room/${roomId}`),
   hostResponse: (id, response) => api.patch(`/api/reviews/${id}/host-response`, { response }),
@@ -171,8 +200,9 @@ export const offersApi = {
 export const analyticsApi = {
   occupancy: (params) => api.get('/api/analytics/occupancy', { params }),
   revenue: (params) => api.get('/api/analytics/revenue', { params }),
-  guestDashboard: () => api.get('/api/dashboard'),
-  hostDashboard: () => api.get('/api/host/dashboard'),
+  guestDashboard: () => api.get('/api/guest/dashboard'),
+  hostDashboard: () => api.get('/api/dashboard'),
+  dashboard: () => api.get('/api/dashboard'),
 };
 
 export const waitlistApi = {
@@ -183,6 +213,7 @@ export const waitlistApi = {
 
 export const wishlistApi = {
   list: () => api.get('/api/wishlist'),
+  toggle: (roomId) => api.post(`/api/wishlist/${roomId}`),
   add: (roomId) => api.post(`/api/wishlist/${roomId}`),
 };
 
@@ -194,6 +225,11 @@ export const referralsApi = {
 export const notificationsApi = {
   list: () => api.get('/api/notifications'),
   markRead: (id) => api.patch(`/api/notifications/${id}/read`),
+};
+
+export const inquiriesApi = {
+  list: (params) => api.get('/api/inquiries', { params }),
+  reply: (id, data) => api.post(`/api/inquiries/${id}/replies`, data),
 };
 
 export const attractionsApi = {
@@ -216,3 +252,49 @@ export function formatCurrency(amount) {
 export function roomId(room) {
   return room?._id || room?.id;
 }
+
+// ── Named exports (spec API) — return response.data ──
+
+export const fetchRooms = (params) => api.get('/api/rooms', { params }).then((r) => r.data);
+export const fetchRoom = (id) => api.get(`/api/rooms/${id}`).then((r) => r.data);
+export const createRoom = (data) => api.post('/api/rooms', data).then((r) => r.data);
+export const updateRoom = (id, data) => api.patch(`/api/rooms/${id}`, data).then((r) => r.data);
+export const deleteRoom = (id) => api.delete(`/api/rooms/${id}`).then((r) => r.data);
+export const recommendRooms = (data) => api.post('/api/rooms/recommend', data).then((r) => r.data);
+export const fetchBookedDates = (id) => api.get(`/api/rooms/${id}/booked-dates`).then((r) => r.data);
+
+export const createBooking = (data) => api.post('/api/bookings', data).then((r) => r.data);
+export const fetchBookings = (params) => api.get('/api/bookings', { params }).then((r) => r.data);
+export const fetchBooking = (id) => api.get(`/api/bookings/${id}`).then((r) => r.data);
+export const cancelBooking = (id) => api.delete(`/api/bookings/${id}`).then((r) => r.data);
+export const payBooking = (id) => api.post(`/api/bookings/${id}/pay`).then((r) => r.data);
+
+export const loginUser = (data) => api.post('/api/auth/login', data).then((r) => r.data);
+export const registerUser = (data) => api.post('/api/auth/register', data).then((r) => r.data);
+export const fetchMe = () => api.get('/api/auth/me').then((r) => r.data);
+export const updateProfile = (data) => api.patch('/api/auth/profile', data).then((r) => r.data);
+
+export const submitReview = (data) => api.post('/api/reviews', data).then((r) => r.data);
+export const fetchRoomReviews = (roomId) => api.get(`/api/reviews/room/${roomId}`).then((r) => r.data);
+
+export const calculatePrice = (data) => api.post('/api/pricing/calculate', data).then((r) => r.data);
+
+export const validateOffer = (code) => api.get(`/api/offers/${code}`).then((r) => r.data);
+export const fetchOffers = (params) => api.get('/api/offers', { params }).then((r) => r.data);
+export const createOffer = (data) => api.post('/api/offers', data).then((r) => r.data);
+export const deleteOffer = (id) => api.delete(`/api/offers/${id}`).then((r) => r.data);
+
+export const fetchDashboard = () => api.get('/api/dashboard').then((r) => r.data);
+export const fetchAnalytics = (year) => api.get('/api/analytics/occupancy', { params: { year } }).then((r) => r.data);
+
+export const joinWaitlist = (data) => api.post('/api/waitlist', data).then((r) => r.data);
+export const checkWaitlist = (phone) => api.get(`/api/waitlist/${phone}`).then((r) => r.data);
+
+export const toggleWishlist = (roomId) => api.post(`/api/wishlist/${roomId}`).then((r) => r.data);
+export const fetchWishlist = () => api.get('/api/wishlist').then((r) => r.data);
+
+export const fetchWeather = (lat, lon) => api.get(`/api/weather/${lat}/${lon}`).then((r) => r.data);
+export const fetchAttractions = (city) => api.get(`/api/attractions/${city}`).then((r) => r.data);
+
+export const fetchNotifications = () => api.get('/api/notifications').then((r) => r.data);
+export const markNotificationRead = (id) => api.patch(`/api/notifications/${id}/read`).then((r) => r.data);

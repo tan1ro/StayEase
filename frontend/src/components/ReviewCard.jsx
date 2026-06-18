@@ -17,6 +17,10 @@ export default function ReviewCard({ review, compact = false }) {
           </div>
         </div>
         <StarRating value={review.rating} readonly size={12} />
+        {review.room_number && (
+          <span className="review-card-compact__room">Room {review.room_number}</span>
+        )}
+        {review.title && <strong className="review-card-compact__title">{review.title}</strong>}
         <p className="review-card-compact__body">{review.body}</p>
       </div>
     );
@@ -29,6 +33,9 @@ export default function ReviewCard({ review, compact = false }) {
         <StarRating value={review.rating} readonly size={14} />
       </div>
       {review.title && <h4>{review.title}</h4>}
+      {review.room_number && (
+        <p className="review-card__room">Room {review.room_number}</p>
+      )}
       <p>{review.body}</p>
       {review.host_response && (
         <div className="review-card__response">

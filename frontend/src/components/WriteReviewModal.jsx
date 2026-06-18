@@ -12,6 +12,7 @@ export default function WriteReviewModal({
   onClose,
   booking,
   roomTitle,
+  propertyName,
   onSubmitted,
 }) {
   const [rating, setRating] = useState(5);
@@ -22,7 +23,8 @@ export default function WriteReviewModal({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const displayTitle = roomTitle || booking?.room_title || 'your stay';
+  const hotelName = propertyName || roomTitle || booking?.room_title || 'this hotel';
+  const roomLabel = booking?.room_number ? ` (Room ${booking.room_number})` : '';
 
   const handleClose = () => {
     if (loading) return;
@@ -73,16 +75,16 @@ export default function WriteReviewModal({
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Rate your stay" size="md">
+    <Modal open={open} onClose={handleClose} title="Rate this hotel" size="md">
       {success ? (
         <div className="write-review-success" role="status">
           <Icon icon={Star} size={ICON.lg} fill="currentColor" />
-          <p>Thanks for rating {displayTitle}!</p>
+          <p>Thanks for reviewing {hotelName}{roomLabel}!</p>
         </div>
       ) : (
         <form className="write-review-form" onSubmit={handleSubmit}>
           <p className="listing-modal__lead">
-            How was {displayTitle}? Your review helps other travellers choose the right stay.
+            How was your stay at {hotelName}{roomLabel}? Your review helps other travellers choose the right hotel.
           </p>
 
           <div className="form-group">

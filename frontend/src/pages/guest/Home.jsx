@@ -6,6 +6,8 @@ import CategoryStrip from '../../components/CategoryStrip';
 import RoomCard from '../../components/RoomCard';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
+import OfferBanner from '../../components/OfferBanner';
+import CompareRoomsModal from '../../components/CompareRoomsModal';
 import WelcomeOfferModal from '../../components/onboarding/WelcomeOfferModal';
 import { useAuth } from '../../context/AuthContext';
 import { useOnboarding } from '../../context/OnboardingContext';
@@ -21,7 +23,7 @@ function groupByCity(rooms) {
   return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
 }
 
-function RoomRow({ title, rooms }) {
+function RoomRow({ title, rooms, compareIds, onCompareToggle }) {
   const scroll = (dir) => {
     const el = document.getElementById(`row-${title.replace(/\s/g, '-')}`);
     if (el) el.scrollBy({ left: dir * 320, behavior: 'smooth' });
@@ -43,7 +45,13 @@ function RoomRow({ title, rooms }) {
       <div className="room-row__scroll" id={`row-${title.replace(/\s/g, '-')}`}>
         {rooms.map((room) => (
           <div key={room._id} className="room-row__item">
-            <RoomCard room={room} matchScore={room.match_score} />
+            <RoomCard
+              room={room}
+              matchScore={room.match_score}
+              compareMode
+              compareSelected={compareIds.includes(room._id || room.id)}
+              onCompareToggle={onCompareToggle}
+            />
           </div>
         ))}
       </div>
@@ -59,6 +67,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showWelcomeOffer, setShowWelcomeOffer] = useState(false);
+  const [compareIds, setCompareIds] = useState([]);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
   const hasActiveFilters = useMemo(() => {
@@ -66,11 +76,12 @@ export default function Home() {
       filters.type.length || filters.food.length || filters.smoking ||
       filters.alcohol || filters.view.length || filters.balcony ||
       filters.city || filters.search || filters.nearby || filters.available ||
-      filters.max_price !== '50000' || filters.sort,
+      filters.max_price !== '50000' || filters.sort ||
+      searchParams.get('check_in') || searchParams.get('guests'),
     );
-  }, [filters]);
+  }, [filters, searchParams]);
 
-  const fetchRooms = async () => {
+  const loadRooms = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -85,7 +96,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchRooms();
+    loadRooms();
   }, [searchParams]);
 
   useEffect(() => {
@@ -95,65 +106,94 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [authLoading, user, isWelcomeOfferDismissed]);
 
-  const handleCloseWelcomeOffer = () => {
-    dismissWelcomeOffer();
-    setShowWelcomeOffer(false);
+  const handleCompareToggle = (roomId) => {
+    setCompareIds((prev) => {
+      if (prev.includes(roomId)) return prev.filter((id) => id !== roomId);
+      if (prev.length >= 3) return prev;
+      return [...prev, roomId];
+    });
   };
 
-  const cityGroups = useMemo(() => groupByCity(rooms), [rooms]);
+  const compareRooms = rooms.filter((r) => compareIds.includes(r._id || r.id));
 
   return (
     <div className="home-page">
-      <WelcomeOfferModal open={showWelcomeOffer} onClose={handleCloseWelcomeOffer} />
-      <div className="home-chrome">
+      <WelcomeOfferModal open={showWelcomeOffer} onClose={() => { dismissWelcomeOffer(); setShowWelcomeOffer(false); }} />
+      <OfferBanner />
+      <div className="home-chrome" style={{ padding: '0 1rem 1rem' }}>
         <div className="search-strips">
           <CategoryStrip />
         </div>
-        <FilterBar defaultExpanded={false} />
+        <FilterBar defaultExpanded={hasActiveFilters} />
       </div>
 
       {loading && <Spinner label="Loading rooms..." />}
-      {error && <ErrorMessage message={error.message} isNetwork={error.isNetwork} onRetry={fetchRooms} />}
+      {error && <ErrorMessage message={error.message} isNetwork={error.isNetwork} onRetry={loadRooms} />}
 
       {!loading && !error && (
         <>
           {rooms.length === 0 ? (
             <div className="empty-state">
               <p>No rooms match your filters.</p>
-              <p className="empty-state__hint">Try adjusting filters or search a different destination.</p>
             </div>
           ) : hasActiveFilters ? (
-            <section>
-              <h2 className="home-results__title">
-                {filters.nearby
-                  ? `${rooms.length} stay${rooms.length !== 1 ? 's' : ''} near you`
-                  : filters.city && filters.type.length === 1
-                  ? `${rooms.length} ${filters.type[0]} stay${rooms.length !== 1 ? 's' : ''} in ${filters.city}`
-                  : filters.city
-                    ? `${rooms.length} stay${rooms.length !== 1 ? 's' : ''} in ${filters.city}`
-                    : filters.type.length === 1
-                      ? `${rooms.length} ${filters.type[0]} stay${rooms.length !== 1 ? 's' : ''}`
-                      : `${rooms.length} stay${rooms.length !== 1 ? 's' : ''} found`}
-              </h2>
+            <section style={{ padding: '0 1rem' }}>
+              <h2 className="home-results__title">{rooms.length} room{rooms.length !== 1 ? 's' : ''} found</h2>
               <div className="grid-rooms">
                 {rooms.map((room) => (
-                  <RoomCard key={room._id} room={room} matchScore={room.match_score} />
+                  <RoomCard
+                    key={room._id}
+                    room={room}
+                    matchScore={room.match_score}
+                    compareMode
+                    compareSelected={compareIds.includes(room._id || room.id)}
+                    onCompareToggle={handleCompareToggle}
+                  />
                 ))}
               </div>
             </section>
           ) : (
             <div className="home-sections">
-              {cityGroups.map(([city, cityRooms]) => (
+              {groupByCity(rooms).map(([city, cityRooms]) => (
                 <RoomRow
                   key={city}
                   title={`Stay in ${city}`}
                   rooms={cityRooms}
+                  compareIds={compareIds}
+                  onCompareToggle={handleCompareToggle}
                 />
               ))}
             </div>
           )}
         </>
       )}
+
+      {compareIds.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 72,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 100,
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 999,
+          padding: '0.75rem 1.25rem',
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'center',
+        }}
+        >
+          <span>Compare ({compareIds.length})</span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setCompareOpen(true)}>
+            View comparison
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCompareIds([])}>Clear</button>
+        </div>
+      )}
+
+      <CompareRoomsModal open={compareOpen} onClose={() => setCompareOpen(false)} rooms={compareRooms} />
     </div>
   );
 }

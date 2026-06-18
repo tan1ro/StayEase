@@ -4,10 +4,15 @@ import { ArrowLeft, Calendar } from 'lucide-react';
 import ErrorMessage from '../../components/ErrorMessage';
 import Spinner from '../../components/Spinner';
 import CommunityCommitmentModal from '../../components/onboarding/CommunityCommitmentModal';
+import LegalAcceptance from '../../components/LegalAcceptance';
+import { setToken, setStoredUser } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
-import { defaultRouteForUser, detectRegistrationRole } from '../../utils/roles';
+import { detectRegistrationRole, isHostRole } from '../../utils/roles';
 
 const STEPS = ['account', 'profile', 'community'];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_RE = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 function isAdult(dob) {
   if (!dob) return false;
@@ -36,6 +41,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
 
   const goBack = () => {
     setError('');
@@ -46,8 +52,12 @@ export default function Register() {
   const handleAccountContinue = (e) => {
     e.preventDefault();
     setError('');
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!EMAIL_RE.test(form.email.trim())) {
+      setError('Enter a valid email address');
+      return;
+    }
+    if (!PASSWORD_RE.test(form.password)) {
+      setError('Password must be at least 8 characters with 1 uppercase letter and 1 number');
       return;
     }
     setStep(STEPS[1]);
@@ -62,6 +72,10 @@ export default function Register() {
     }
     if (!/^\d{10}$/.test(form.phone)) {
       setError('Phone must be a 10-digit number');
+      return;
+    }
+    if (!acceptedLegal) {
+      setError('Please accept the Terms of Service, Privacy Policy, and Cookie Policy to continue');
       return;
     }
     setStep(STEPS[2]);
@@ -81,7 +95,10 @@ export default function Register() {
         referred_by: form.referred_by || undefined,
         date_of_birth: form.dateOfBirth,
       });
-      navigate(defaultRouteForUser(user));
+      const token = localStorage.getItem('stayease_token');
+      if (token) setToken(token);
+      setStoredUser(user);
+      navigate(isHostRole(user.role) ? '/host' : '/');
     } catch (err) {
       if (err.normalized?.fields) setFieldErrors(err.normalized.fields);
       setError(err.normalized?.message || 'Registration failed');
@@ -130,7 +147,7 @@ export default function Register() {
                     placeholder="Password"
                     required
                   />
-                  <p className="form-hint">Use 8+ characters with uppercase, number, and symbol.</p>
+                  <p className="form-hint">Use 8+ characters with at least 1 uppercase letter and 1 number.</p>
                 </div>
                 {searchParams.get('as') === 'host' && (
                   <p className="form-hint">You&apos;re signing up as a host. Your account role is detected from this signup flow.</p>
@@ -207,14 +224,23 @@ export default function Register() {
                   />
                 </div>
 
+                <LegalAcceptance
+                  id="register-legal-acceptance"
+                  checked={acceptedLegal}
+                  onChange={setAcceptedLegal}
+                  className="onboarding-legal-checkbox"
+                  suffix="."
+                />
+
                 <p className="onboarding-legal">
-                  By selecting <strong>Agree and continue</strong>, I agree to StayEase&apos;s{' '}
-                  <Link to="/terms" target="_blank" rel="noreferrer">Terms of Service</Link>,{' '}
-                  <Link to="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</Link>, and
-                  community commitment.
+                  You will also be asked to accept our community commitment on the next step.
                 </p>
 
-                <button type="submit" className="btn btn-primary onboarding-card__submit">
+                <button
+                  type="submit"
+                  className="btn btn-primary onboarding-card__submit"
+                  disabled={!acceptedLegal}
+                >
                   Agree and continue
                 </button>
               </form>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Tag, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import AvailabilityCalendar from './AvailabilityCalendar';
 import CancellationPolicy from './CancellationPolicy';
 import DateRangePicker from './DateRangePicker';
 import { formatCurrency } from '../api/api';
@@ -14,10 +15,12 @@ export default function BookingCard({
   initialGuests = 1,
   onDatesChange,
   onPricingChange,
+  previewMode = false,
 }) {
   const [checkIn, setCheckIn] = useState(initialCheckIn);
   const [checkOut, setCheckOut] = useState(initialCheckOut);
   const [guests, setGuests] = useState(initialGuests);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     setCheckIn(initialCheckIn);
@@ -51,10 +54,6 @@ export default function BookingCard({
 
   return (
     <aside className="booking-widget">
-      <div className="booking-widget__fees">
-        <Tag size={14} />
-        <span>Prices include all fees</span>
-      </div>
       <div className="booking-widget__card">
         <p className="booking-widget__price">
           {loading && nights ? (
@@ -67,7 +66,7 @@ export default function BookingCard({
           ) : (
             <>
               <strong>{formatCurrency(room.price_per_night)}</strong>
-              <span> / night</span>
+              <span> / night + taxes</span>
             </>
           )}
         </p>
@@ -86,9 +85,11 @@ export default function BookingCard({
               setCheckIn(start);
               setCheckOut(end);
             }}
+            onFocus={() => setShowCalendar(true)}
             startLabel="Check-in"
             endLabel="Checkout"
           />
+          <AvailabilityCalendar roomId={roomId} visible={showCalendar} />
           <label className="booking-widget__guests">
             <span className="booking-widget__label">Guests</span>
             <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">
@@ -102,10 +103,16 @@ export default function BookingCard({
           </label>
         </div>
 
-        <Link to={bookUrl} className="booking-widget__reserve">
-          Reserve
-        </Link>
-        <p className="booking-widget__note">You won&apos;t be charged yet</p>
+        {previewMode ? (
+          <p className="booking-widget__preview-note">Preview mode — booking is disabled</p>
+        ) : (
+          <>
+            <Link to={bookUrl} className="booking-widget__reserve">
+              Reserve
+            </Link>
+            <p className="booking-widget__note">You won&apos;t be charged yet</p>
+          </>
+        )}
         <CancellationPolicy policy={room.policies?.cancellation || 'moderate'} compact />
       </div>
     </aside>

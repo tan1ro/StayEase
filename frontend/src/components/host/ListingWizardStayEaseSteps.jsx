@@ -1,16 +1,27 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   BadgeIndianRupee,
+  Bolt,
+  CalendarCheck,
+  CircleHelp,
   FileText,
   Leaf,
   MessageCircle,
+  Pencil,
   Receipt,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { formatCurrency } from '../../api/api';
-import { calculateGST } from '../GSTBreakdown';
+import Modal from '../Modal';
 import { Icon, ICON } from '../ui/Icon';
 import { STAY_VIBES, STAYEASE_OFFERS } from '../../constants/stayVibes';
+import { FACING_OPTIONS, VIEW_TYPE_LABELS } from '../../constants/roomPlacement';
+import { listingPricePreview, guestPaysPerNightInclGst } from '../../utils/listingPricePreview';
+import { hotelGstSlabSummary } from '../../constants/hotelGstSlabs';
+import { LISTING_SAFETY_LINKS, SAFETY_DISCLOSURE_ITEMS } from '../../constants/listingSafetyLinks';
+import HotelGstInfoAlert from './HotelGstInfoAlert';
 
 export function StayVibesStep({ selected, onChange, category }) {
   const toggle = (id) => {
@@ -173,57 +184,232 @@ export function HospitalityStep({ form, set, setPol }) {
           ))}
         </div>
       </div>
+      <div className="listing-wizard__hospitality-card">
+        <label className="label">View from the room</label>
+        <select
+          className="select"
+          value={form.view_type}
+          onChange={(e) => set('view_type', e.target.value)}
+        >
+          {Object.entries(VIEW_TYPE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <label className="label" style={{ marginTop: '1rem' }}>Facing side</label>
+        <select
+          className="select"
+          value={form.facing_side || 'none'}
+          onChange={(e) => set('facing_side', e.target.value)}
+        >
+          {FACING_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <label className="label" style={{ marginTop: '1rem' }}>Floor label (optional)</label>
+        <input
+          className="input"
+          value={form.floor_label || ''}
+          onChange={(e) => set('floor_label', e.target.value)}
+          placeholder="e.g. 4th floor"
+          maxLength={40}
+        />
+        <label className="label" style={{ marginTop: '1rem' }}>View notes for guests (optional)</label>
+        <textarea
+          className="textarea"
+          rows={3}
+          value={form.view_description || ''}
+          onChange={(e) => set('view_description', e.target.value)}
+          placeholder="Describe which side has the best view, balcony outlook, etc."
+          maxLength={300}
+        />
+        <label className="listing-wizard__checkbox" style={{ marginTop: '1rem' }}>
+          <input
+            type="checkbox"
+            checked={form.has_balcony}
+            onChange={(e) => set('has_balcony', e.target.checked)}
+          />
+          <span>Room has a balcony</span>
+        </label>
+      </div>
     </div>
   );
 }
 
 function gstSlabLabel(price) {
-  if (price < 1000) return '0% — tariff under ₹1,000/night';
-  if (price <= 7500) return '12% — standard hotel slab (₹1,000–₹7,500)';
-  return '18% — premium slab (above ₹7,500)';
+  return hotelGstSlabSummary(price);
+}
+
+const BOOKING_MODES = [
+  {
+    id: 'review_first',
+    label: 'Approve your first 5 bookings',
+    recommended: true,
+    description: 'Start by reviewing reservation requests, then switch to Instant Book so guests can book automatically.',
+    icon: CalendarCheck,
+  },
+  {
+    id: 'instant_book',
+    label: 'Use Instant Book',
+    description: 'Let guests book automatically.',
+    icon: Bolt,
+  },
+];
+
+export function BookingSettingsStep({ bookingMode, onBookingMode }) {
+  return (
+    <div className="listing-wizard__step listing-wizard__step--narrow listing-wizard__step--centered">
+      <h1 className="listing-wizard__title">Pick your booking settings</h1>
+      <p className="listing-wizard__subtitle">
+        You can change this at any time in your listing settings.
+      </p>
+      <div className="listing-wizard__option-list" role="radiogroup" aria-label="Booking settings">
+        {BOOKING_MODES.map(({ id, label, recommended, description, icon: ModeIcon }) => {
+          const isActive = bookingMode === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              className={`listing-wizard__option-row ${isActive ? 'listing-wizard__option-row--active' : ''}`}
+              onClick={() => onBookingMode(id)}
+            >
+              <div>
+                {recommended && <span className="listing-wizard__recommended-badge">Recommended</span>}
+                <strong>{label}</strong>
+                <p>{description}</p>
+              </div>
+              <Icon icon={ModeIcon} size={ICON.lg} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PriceTierModal({
+  open,
+  onClose,
+  title,
+  price,
+  onPrice,
+  weekendBoost,
+  onWeekendBoost,
+  isWeekend,
+}) {
+  const preview = listingPricePreview(price);
+  const { gst } = preview;
+
+  const handlePriceChange = (raw) => {
+    const next = Math.max(100, Math.round(Number(raw) || 0));
+    if (isWeekend && onWeekendBoost) {
+      const weekday = Math.max(100, Math.round(next / (1 + weekendBoost / 100)));
+      onPrice(weekday);
+      return;
+    }
+    onPrice(next);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm">
+      <div className="listing-wizard__price-modal">
+        <div className="listing-wizard__price-modal-hero">
+          <div className="listing-wizard__price-display">
+            <span>₹</span>
+            <input
+              type="number"
+              min={100}
+              step={50}
+              value={price}
+              onChange={(e) => handlePriceChange(e.target.value)}
+              aria-label={`${title} price per night`}
+            />
+            <Icon icon={Pencil} size={ICON.sm} />
+          </div>
+        </div>
+        <div className="listing-wizard__price-modal-breakdown">
+          <div className="listing-wizard__price-modal-row">
+            <span>Base price</span>
+            <span>{formatCurrency(preview.subtotal)}</span>
+          </div>
+          <div className="listing-wizard__price-modal-row">
+            <span>Guest service fee</span>
+            <span>{formatCurrency(preview.guestPlatformFee)}</span>
+          </div>
+          <div className="listing-wizard__price-modal-row listing-wizard__price-modal-row--total">
+            <span>Guest price before taxes</span>
+            <span>{formatCurrency(preview.guestPriceBeforeTaxes)}</span>
+          </div>
+        </div>
+        <p className="listing-wizard__price-modal-earn">
+          You earn <strong>{formatCurrency(preview.hostEarns)}</strong>
+        </p>
+        <div className="listing-wizard__gst-card listing-wizard__gst-card--modal">
+          <p className="listing-wizard__gst-slab">
+            <Icon icon={Receipt} size={ICON.sm} />
+            GST slab: {gstSlabLabel(price)}
+          </p>
+          <div className="listing-wizard__gst-rows">
+            <span>CGST ({(gst.cgst_rate * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
+            <span>{formatCurrency(gst.cgst_amount)}</span>
+            <span>SGST ({(gst.sgst_rate * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
+            <span>{formatCurrency(gst.sgst_amount)}</span>
+            <span className="listing-wizard__gst-rows-total">Guest pays (incl. GST)</span>
+            <span className="listing-wizard__gst-rows-total">
+              {formatCurrency(preview.guestPaysInclGst)}
+            </span>
+          </div>
+        </div>
+        <div className="listing-wizard__price-modal-actions">
+          <button type="button" className="btn btn--primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 export function PricingGstStep({ price, onPrice, weekendBoost, onWeekendBoost }) {
-  const gst = calculateGST(price, 1);
-  const weekendPrice = Math.round(price * (1 + weekendBoost / 100));
+  const [modalTier, setModalTier] = useState(null);
+  const weekdayPrice = Math.max(100, Math.round(Number(price) || 0));
+  const weekendPrice = Math.round(weekdayPrice * (1 + weekendBoost / 100));
+  const weekdayGuestTotal = guestPaysPerNightInclGst(weekdayPrice);
+  const weekendGuestTotal = guestPaysPerNightInclGst(weekendPrice);
 
   return (
-    <div className="listing-wizard__step listing-wizard__step--narrow">
-      <h1 className="listing-wizard__title">Set your price with GST insight</h1>
+    <div className="listing-wizard__step listing-wizard__step--narrow listing-wizard__step--centered">
+      <h1 className="listing-wizard__title">Now, set your nightly price</h1>
       <p className="listing-wizard__subtitle">
-        StayEase calculates CGST &amp; SGST automatically on every booking — unique to Indian hotel billing.
+        Tip: {formatCurrency(weekdayGuestTotal)} incl. GST is a common guest price in your area.
+        {' '}
+        You can change this anytime.
       </p>
-      <div className="listing-wizard__price-hero">
-        <span className="listing-wizard__price-label">Base price per night</span>
-        <div className="listing-wizard__price-display">
-          <span>₹</span>
-          <input
-            type="number"
-            min={100}
-            step={50}
-            value={price}
-            onChange={(e) => onPrice(Number(e.target.value))}
-            aria-label="Base price per night"
-          />
-        </div>
-        <p className="listing-wizard__gst-slab">
-          <Icon icon={Receipt} size={ICON.sm} />
-          GST slab: {gstSlabLabel(price)}
-        </p>
+      <div className="listing-wizard__price-tier-grid">
+        <button
+          type="button"
+          className="listing-wizard__price-tier"
+          onClick={() => setModalTier('weekday')}
+        >
+          <span className="listing-wizard__price-tier-label">Weekday</span>
+          <span className="listing-wizard__price-tier-value">{formatCurrency(weekdayGuestTotal)}</span>
+          <span className="listing-wizard__price-tier-note">per night incl. GST</span>
+        </button>
+        <button
+          type="button"
+          className="listing-wizard__price-tier"
+          onClick={() => setModalTier('weekend')}
+        >
+          <span className="listing-wizard__price-tier-label">Weekend</span>
+          <span className="listing-wizard__price-tier-value">{formatCurrency(weekendGuestTotal)}</span>
+          <span className="listing-wizard__price-tier-note">Fri &amp; Sat · incl. GST</span>
+        </button>
       </div>
-      <div className="listing-wizard__gst-card">
-        <h3>Guest pays (1 night, incl. GST)</h3>
-        <p className="listing-wizard__gst-total">{formatCurrency(gst.grand_total)}</p>
-        <div className="listing-wizard__gst-rows">
-          <span>Room tariff</span><span>{formatCurrency(gst.subtotal)}</span>
-          <span>CGST ({(gst.cgst_rate * 100).toFixed(0)}%)</span><span>{formatCurrency(gst.cgst_amount)}</span>
-          <span>SGST ({(gst.sgst_rate * 100).toFixed(0)}%)</span><span>{formatCurrency(gst.sgst_amount)}</span>
-        </div>
-      </div>
-      <div className="listing-wizard__weekend-card">
+      <div className="listing-wizard__weekend-card listing-wizard__weekend-card--centered">
         <div>
           <strong>Weekend adjustment</strong>
-          <p>Fri &amp; Sat suggested rate: {formatCurrency(weekendPrice)}</p>
+          <p>Adjust how much higher Fri &amp; Sat rates are vs weekday.</p>
         </div>
         <div className="listing-wizard__weekend-controls">
           <button type="button" className="listing-wizard__counter-btn" onClick={() => onWeekendBoost(Math.max(0, weekendBoost - 1))}>−</button>
@@ -231,6 +417,25 @@ export function PricingGstStep({ price, onPrice, weekendBoost, onWeekendBoost })
           <button type="button" className="listing-wizard__counter-btn" onClick={() => onWeekendBoost(Math.min(30, weekendBoost + 1))}>+</button>
         </div>
       </div>
+      <HotelGstInfoAlert pricePerNight={weekdayPrice} />
+      <PriceTierModal
+        open={modalTier === 'weekday'}
+        onClose={() => setModalTier(null)}
+        title="Weekday"
+        price={weekdayPrice}
+        onPrice={onPrice}
+        isWeekend={false}
+      />
+      <PriceTierModal
+        open={modalTier === 'weekend'}
+        onClose={() => setModalTier(null)}
+        title="Weekend"
+        price={weekendPrice}
+        onPrice={onPrice}
+        weekendBoost={weekendBoost}
+        onWeekendBoost={onWeekendBoost}
+        isWeekend
+      />
     </div>
   );
 }
@@ -243,7 +448,7 @@ export function OffersStep({ selected, onChange }) {
   };
 
   return (
-    <div className="listing-wizard__step listing-wizard__step--narrow">
+    <div className="listing-wizard__step listing-wizard__step--narrow listing-wizard__step--centered">
       <h1 className="listing-wizard__title">Boost bookings with StayEase offers</h1>
       <p className="listing-wizard__subtitle">
         Select launch discounts — you can fine-tune them in Manage Offers after publishing.
@@ -268,33 +473,66 @@ export function OffersStep({ selected, onChange }) {
   );
 }
 
-export function SafetyStep({ amenities, onAmenitiesChange, gstRegistered, onGstRegistered }) {
-  const hasCctv = amenities.includes('CCTV');
-  const toggleCctv = () => {
-    onAmenitiesChange(
-      hasCctv ? amenities.filter((a) => a !== 'CCTV') : [...amenities, 'CCTV'],
-    );
+export function SafetyStep({ amenities, onAmenitiesChange, safetyDisclosures, onSafetyDisclosuresChange }) {
+  const isChecked = (item) => {
+    if (item.amenityKey) return amenities.includes(item.amenityKey);
+    return Boolean(safetyDisclosures?.[item.id]);
+  };
+
+  const toggleItem = (item) => {
+    if (item.amenityKey) {
+      const has = amenities.includes(item.amenityKey);
+      onAmenitiesChange(
+        has ? amenities.filter((a) => a !== item.amenityKey) : [...amenities, item.amenityKey],
+      );
+      return;
+    }
+    onSafetyDisclosuresChange({
+      ...safetyDisclosures,
+      [item.id]: !safetyDisclosures?.[item.id],
+    });
   };
 
   return (
-    <div className="listing-wizard__step listing-wizard__step--narrow">
-      <h1 className="listing-wizard__title">Safety &amp; compliance</h1>
-      <p className="listing-wizard__subtitle">StayEase requires transparency for guest trust and Indian regulations.</p>
+    <div className="listing-wizard__step listing-wizard__step--narrow listing-wizard__step--centered">
+      <h1 className="listing-wizard__title">Share safety details</h1>
+      <p className="listing-wizard__safety-question">
+        Does your place have any of these?
+        <button
+          type="button"
+          className="listing-wizard__safety-help"
+          aria-label="Learn more about safety disclosures"
+          title="Disclose security cameras, noise monitors, and weapons so guests know what to expect."
+        >
+          <Icon icon={CircleHelp} size={ICON.sm} />
+        </button>
+      </p>
       <div className="listing-wizard__safety-list">
-        <label className="listing-wizard__safety-row">
-          <span>Exterior CCTV in common areas</span>
-          <input type="checkbox" checked={hasCctv} onChange={toggleCctv} />
-        </label>
-        <label className="listing-wizard__safety-row">
-          <span>Property is GST-registered for invoicing</span>
-          <input type="checkbox" checked={gstRegistered} onChange={(e) => onGstRegistered(e.target.checked)} />
-        </label>
+        {SAFETY_DISCLOSURE_ITEMS.map((item) => (
+          <label key={item.id} className="listing-wizard__safety-row">
+            <span>{item.label}</span>
+            <input
+              type="checkbox"
+              checked={isChecked(item)}
+              onChange={() => toggleItem(item)}
+            />
+          </label>
+        ))}
       </div>
-      <div className="listing-wizard__compliance-note">
-        <Icon icon={ShieldCheck} size={ICON.md} />
+      <div className="listing-wizard__safety-important">
+        <h2>Important things to know</h2>
         <p>
-          StayEase generates tax invoices with CGST/SGST split on every paid booking.
-          Guests receive email and WhatsApp confirmations automatically.
+          Security cameras that monitor indoor spaces are not allowed even if they&apos;re turned off.
+          All exterior security cameras must be disclosed.
+        </p>
+        <p>
+          Be sure to comply with your{' '}
+          <Link to={LISTING_SAFETY_LINKS.localLaws}>local laws</Link>
+          {' '}and review StayEase&apos;s{' '}
+          <Link to={LISTING_SAFETY_LINKS.antiDiscrimination}>anti-discrimination policy</Link>
+          {' '}and{' '}
+          <Link to={LISTING_SAFETY_LINKS.serviceFees}>StayEase Service Fees</Link>
+          .
         </p>
       </div>
     </div>
@@ -302,7 +540,10 @@ export function SafetyStep({ amenities, onAmenitiesChange, gstRegistered, onGstR
 }
 
 export function ReviewPublishStep({ form, photosCount, plannedOffers }) {
-  const gst = calculateGST(form.price_per_night, 1);
+  const preview = listingPricePreview(form.price_per_night);
+  const bookingLabel = form.booking_mode === 'instant_book'
+    ? 'Instant Book'
+    : 'Review first 5 bookings';
 
   return (
     <div className="listing-wizard__step listing-wizard__step--narrow">
@@ -318,7 +559,11 @@ export function ReviewPublishStep({ form, photosCount, plannedOffers }) {
           </div>
           <div>
             <Icon icon={Receipt} size={ICON.md} />
-            <span>{formatCurrency(gst.grand_total)} incl. GST</span>
+            <span>{formatCurrency(preview.guestPriceBeforeTaxes)} + taxes</span>
+          </div>
+          <div>
+            <Icon icon={Zap} size={ICON.md} />
+            <span>{bookingLabel}</span>
           </div>
           <div>
             <Icon icon={FileText} size={ICON.md} />

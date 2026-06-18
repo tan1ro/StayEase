@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, MessageCircle, Receipt, ShieldCheck, Star } from 'lucide-react';
+import { ArrowLeft, Check, MapPin, Minus, Plus, Receipt, Star } from 'lucide-react';
 import PriceBreakdown from '../../components/PriceBreakdown';
-import CancellationPolicy from '../../components/CancellationPolicy';
 import DatePicker from '../../components/DatePicker';
 import RoomBadges from '../../components/RoomBadges';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
-import WaitlistModal from '../../components/WaitlistModal';
+import ConfirmModal from '../../components/ConfirmModal';
 import SafeImage from '../../components/SafeImage';
-import BookingGuestVerification, {
-  defaultGuestVerification,
-  prepareBookingVerification,
-} from '../../components/BookingGuestVerification';
 import { Icon, ICON } from '../../components/ui/Icon';
-import { bookingsApi, formatCurrency, roomsApi } from '../../api/api';
+import LegalAcceptance from '../../components/LegalAcceptance';
+import {
+  bookingsApi,
+  formatCurrency,
+  joinWaitlist,
+  roomsApi,
+  validateOffer,
+} from '../../api/api';
 import { useRoomPricing } from '../../hooks/useRoomPricing';
 import { useAuth } from '../../context/AuthContext';
 import { addDaysISO, todayISO, BOOKING_CALENDAR_MONTHS } from '../../utils/dates';
@@ -38,15 +40,26 @@ export default function BookRoom() {
   const [checkOut, setCheckOut] = useState(searchParams.get('check_out') || '');
   const [guests, setGuests] = useState(Number(searchParams.get('guests')) || 1);
   const [offerCode, setOfferCode] = useState('');
-  const [hostMessage, setHostMessage] = useState('');
+  const [offerApplied, setOfferApplied] = useState(null);
+  const [offerError, setOfferError] = useState('');
+  const [applyingOffer, setApplyingOffer] = useState(false);
+  const [guestName, setGuestName] = useState(user?.name || '');
+  const [guestPhone, setGuestPhone] = useState(user?.phone || '');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [dateError, setDateError] = useState('');
-  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [confirmedPricing, setConfirmedPricing] = useState(null);
+  const [conflictError, setConflictError] = useState('');
+  const [showWaitlistForm, setShowWaitlistForm] = useState(false);
+  const [waitlistName, setWaitlistName] = useState('');
+  const [waitlistPhone, setWaitlistPhone] = useState('');
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [waitlistError, setWaitlistError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [guestVerification, setGuestVerification] = useState(() => defaultGuestVerification(user));
-  const [verificationError, setVerificationError] = useState('');
 
   const dateValidationError = useMemo(() => {
     if (!checkIn || !checkOut) return '';
@@ -56,11 +69,13 @@ export default function BookRoom() {
     return '';
   }, [checkIn, checkOut]);
 
+  const activeOfferCode = offerApplied?.code || offerCode;
+
   const { pricing, loading: pricingLoading, error: pricingError, nights } = useRoomPricing(
     roomId,
     dateValidationError ? '' : checkIn,
     dateValidationError ? '' : checkOut,
-    offerCode,
+    activeOfferCode,
   );
 
   useEffect(() => {
@@ -68,17 +83,13 @@ export default function BookRoom() {
   }, [dateValidationError]);
 
   useEffect(() => {
-    if (!user) return;
-    setGuestVerification((prev) => ({
-      ...defaultGuestVerification(user),
-      bookingFor: prev.bookingFor,
-      stayingGuestName: prev.stayingGuestName,
-      stayingGuestPhone: prev.stayingGuestPhone,
-      idType: prev.idType,
-      idNumber: prev.idNumber,
-      useSavedId: user?.identity_proof?.document_url ? prev.useSavedId : false,
-    }));
-  }, [user?.id, user?.identity_proof?.document_url]);
+    if (user) {
+      setGuestName(user.name || '');
+      setGuestPhone(user.phone || '');
+      setWaitlistName(user.name || '');
+      setWaitlistPhone(user.phone || '');
+    }
+  }, [user?.id, user?.name, user?.phone]);
 
   useEffect(() => {
     roomsApi.get(roomId).then(({ data }) => setRoom(data)).catch((err) => {
@@ -89,50 +100,179 @@ export default function BookRoom() {
   const photo = room?.photos?.find((p) => p.is_primary) || room?.photos?.[0];
   const location = [room?.location?.area, room?.location?.city].filter(Boolean).join(', ');
 
-  const handleBook = async (e) => {
+  const handleApplyOffer = async () => {
+    const code = offerCode.trim().toUpperCase();
+    if (!code) {
+      setOfferError('Enter an offer code');
+      return;
+    }
+    setApplyingOffer(true);
+    setOfferError('');
+    try {
+      const data = await validateOffer(code);
+      setOfferApplied(data);
+      setOfferCode(code);
+    } catch (err) {
+      setOfferApplied(null);
+      setOfferError(err.normalized?.message || 'Invalid offer code');
+    } finally {
+      setApplyingOffer(false);
+    }
+  };
+
+  const handleBook = (e) => {
     e.preventDefault();
     if (!user) {
       navigate('/login');
       return;
     }
-    if (dateError) return;
-    if (!acceptedTerms) {
-      setError('Please accept the Terms of Service and Privacy Policy to continue');
+    if (!guestName.trim()) {
+      setError('Guest name is required');
       return;
     }
+    if (!/^\d{10}$/.test(guestPhone)) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
+    }
+    if (dateError) return;
+    if (!acceptedTerms) {
+      setError('Please accept the Terms of Service, Privacy Policy, and Cookie Policy to continue');
+      return;
+    }
+    setError('');
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmBooking = async () => {
     setSubmitting(true);
     setError('');
-    setVerificationError('');
+    setConflictError('');
+    setShowWaitlistForm(false);
     try {
-      const verificationPayload = await prepareBookingVerification(guestVerification, user);
-      const { data } = await bookingsApi.create({
+      const { data: booking } = await bookingsApi.create({
         room_id: roomId,
         check_in_date: checkIn,
         check_out_date: checkOut,
         num_guests: guests,
-        offer_code: offerCode || undefined,
-        host_message: hostMessage.trim() || undefined,
-        ...verificationPayload,
+        offer_code: activeOfferCode || undefined,
+        booking_for: 'self',
+        staying_guest_name: guestName.trim(),
+        staying_guest_phone: guestPhone,
       });
-      navigate(`/receipt/${data._id}`);
+      const { data: paid } = await bookingsApi.pay(booking._id);
+      setConfirmOpen(false);
+      setConfirmedBooking(paid);
+      setConfirmedPricing(pricing);
     } catch (err) {
       if (err.normalized?.status === 409) {
-        setWaitlistOpen(true);
+        setConflictError(err.normalized.message || 'Room not available for selected dates');
+        setShowWaitlistForm(true);
+        setWaitlistName(guestName);
+        setWaitlistPhone(guestPhone);
+        setError('');
       } else if (err.normalized) {
         setError(err.normalized.message);
       } else {
-        if (err.fieldErrors) {
-          setGuestVerification((prev) => ({ ...prev, fieldErrors: err.fieldErrors }));
-        }
-        setVerificationError(err.message || 'Booking failed');
+        setError('Booking failed');
       }
+      setConfirmOpen(false);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleJoinWaitlist = async (e) => {
+    e?.preventDefault?.();
+    if (!waitlistName.trim() || !/^\d{10}$/.test(waitlistPhone)) {
+      setWaitlistError('Name and 10-digit phone required');
+      return;
+    }
+    setWaitlistLoading(true);
+    setWaitlistError('');
+    try {
+      await joinWaitlist({
+        room_id: roomId,
+        guest_name: waitlistName.trim(),
+        guest_phone: waitlistPhone,
+        check_in_date: checkIn,
+        check_out_date: checkOut,
+      });
+      setWaitlistSuccess(true);
+    } catch (err) {
+      setWaitlistError(err.normalized?.message || 'Could not join waitlist');
+    } finally {
+      setWaitlistLoading(false);
+    }
+  };
+
   if (loading) return <Spinner label="Loading booking..." />;
   if (!room) return <ErrorMessage message={error || 'Room not found'} />;
+
+  const bookingPricing = confirmedPricing || (confirmedBooking ? {
+    subtotal: confirmedBooking.subtotal,
+    total_price: confirmedBooking.total_price,
+    gst_amount: confirmedBooking.gst_amount,
+    gst_rate: confirmedBooking.gst_rate,
+    price_breakdown: confirmedBooking.price_breakdown,
+    total_nights: confirmedBooking.total_nights,
+    final_price_per_night: confirmedBooking.final_price_per_night,
+    guest_platform_fee: confirmedBooking.guest_platform_fee,
+    gst_breakdown: confirmedBooking.gst_amount ? {
+      cgst_amount: confirmedBooking.gst_amount / 2,
+      sgst_amount: confirmedBooking.gst_amount / 2,
+      cgst_rate: confirmedBooking.gst_rate / 2,
+      sgst_rate: confirmedBooking.gst_rate / 2,
+    } : undefined,
+  } : null);
+
+  if (confirmedBooking) {
+    return (
+      <div className="book-room">
+        <div className="card" style={{ padding: '2rem', maxWidth: 720, margin: '0 auto', borderColor: 'var(--success, #16a34a)' }}>
+          <h1 className="book-room__title" style={{ color: 'var(--success, #16a34a)' }}>
+            ✅ Booking Confirmed!
+          </h1>
+          <div className="book-room__summary-rows" style={{ marginTop: '1.5rem' }}>
+            <div className="book-room__summary-row">
+              <span>Booking ID</span>
+              <strong>{confirmedBooking._id}</strong>
+            </div>
+            <div className="book-room__summary-row">
+              <span>Room</span>
+              <strong>{room.title}</strong>
+            </div>
+            <div className="book-room__summary-row">
+              <span>Check-in</span>
+              <strong>{formatStayDate(confirmedBooking.check_in_date)}</strong>
+            </div>
+            <div className="book-room__summary-row">
+              <span>Check-out</span>
+              <strong>{formatStayDate(confirmedBooking.check_out_date)}</strong>
+            </div>
+            <div className="book-room__summary-row">
+              <span>Nights</span>
+              <strong>{confirmedBooking.total_nights}</strong>
+            </div>
+            <div className="book-room__summary-row">
+              <span>Total paid</span>
+              <strong>{formatCurrency(confirmedBooking.total_price)} (incl. GST)</strong>
+            </div>
+          </div>
+          {bookingPricing && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <PriceBreakdown pricing={bookingPricing} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+            <Link to={`/receipt/${confirmedBooking._id}`} className="btn btn-primary">
+              <Icon icon={Receipt} size={ICON.sm} /> Download Receipt
+            </Link>
+            <Link to="/bookings" className="btn btn-outline">View My Bookings</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="book-room">
@@ -141,45 +281,55 @@ export default function BookRoom() {
         Back to listing
       </Link>
 
-      <h1 className="book-room__title">Request to book</h1>
-      <p className="book-room__subtitle">
-        Complete your StayEase reservation with GST-inclusive pricing and instant confirmation.
-      </p>
+      <div className="card book-room__section" style={{ marginBottom: '1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        {photo?.url ? (
+          <SafeImage src={photo.url} alt={room.title} style={{ width: 160, height: 120, objectFit: 'cover', borderRadius: 8 }} />
+        ) : (
+          <div style={{ width: 160, height: 120, background: 'var(--border)', borderRadius: 8 }} />
+        )}
+        <div>
+          <h1 className="book-room__title" style={{ marginBottom: '0.25rem' }}>{room.title}</h1>
+          <p className="listing-muted">{room.room_category} · {location}</p>
+          <p><strong>{formatCurrency(room.price_per_night)}</strong> / night</p>
+          {room.avg_rating > 0 && (
+            <p className="book-room__summary-rating">
+              <Icon icon={Star} size={ICON.sm} /> {room.avg_rating.toFixed(2)}
+            </p>
+          )}
+        </div>
+      </div>
 
       <form className="book-room-layout" onSubmit={handleBook}>
         <div className="book-room__main">
           <section className="book-room__section card">
-            <h2>Write a message to your host</h2>
-            <p className="book-room__section-lead">
-              Share why you&apos;re visiting {room.location?.city || 'the area'} and any special requests.
-            </p>
-            <textarea
-              className="textarea book-room__message"
-              value={hostMessage}
-              onChange={(e) => setHostMessage(e.target.value)}
-              placeholder={`Hi! I'm planning a stay from ${formatStayDate(checkIn) || '…'} to ${formatStayDate(checkOut) || '…'}. Looking forward to my visit.`}
-              rows={4}
-              maxLength={500}
-            />
-            <span className="form-hint">{hostMessage.length}/500</span>
+            <h2>Guest details</h2>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="label">Guest name</label>
+                <input
+                  className="input"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Mobile (10 digits)</label>
+                <input
+                  className="input"
+                  value={guestPhone}
+                  onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  pattern="\d{10}"
+                  required
+                />
+              </div>
+            </div>
           </section>
-
-          <BookingGuestVerification
-            user={user}
-            value={guestVerification}
-            onChange={setGuestVerification}
-            error={verificationError}
-          />
 
           <section className="book-room__section card">
             <h2>Your trip</h2>
             {dateError && <ErrorMessage message={dateError} />}
-            {pricingError && (
-              <ErrorMessage
-                message={pricingError}
-                onRetry={() => setOfferCode((code) => code)}
-              />
-            )}
+            {pricingError && <ErrorMessage message={pricingError} />}
             <div className="form-row book-room__dates">
               <div className="form-group">
                 <DatePicker
@@ -204,27 +354,37 @@ export default function BookRoom() {
                 />
               </div>
             </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="label">Guests</label>
-                <input
-                  type="number"
-                  className="input"
-                  min={1}
-                  max={room.max_guests}
-                  value={guests}
-                  onChange={(e) => setGuests(Number(e.target.value))}
-                />
+            <div className="form-group">
+              <label className="label">Guests</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setGuests((g) => Math.max(1, g - 1))}>
+                  <Minus size={14} />
+                </button>
+                <span>{guests}</span>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setGuests((g) => Math.min(room.max_guests, g + 1))}>
+                  <Plus size={14} />
+                </button>
               </div>
-              <div className="form-group">
-                <label className="label">Offer code (optional)</label>
+            </div>
+            <div className="form-group">
+              <label className="label">Offer code</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <input
                   className="input"
                   value={offerCode}
-                  onChange={(e) => setOfferCode(e.target.value)}
+                  onChange={(e) => { setOfferCode(e.target.value.toUpperCase()); setOfferApplied(null); setOfferError(''); }}
                   placeholder="e.g. WELCOME10"
                 />
+                <button type="button" className="btn btn-outline" onClick={handleApplyOffer} disabled={applyingOffer}>
+                  {applyingOffer ? '…' : 'Apply'}
+                </button>
               </div>
+              {offerApplied && (
+                <p style={{ color: 'var(--success, #16a34a)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                  <Check size={14} style={{ verticalAlign: 'middle' }} /> {offerApplied.discount_type === 'percentage' ? `${offerApplied.discount_value}% off applied` : `${formatCurrency(offerApplied.discount_value)} off applied`}
+                </p>
+              )}
+              {offerError && <p className="form-error">{offerError}</p>}
             </div>
             <RoomBadges
               food_preference={room.food_preference}
@@ -237,110 +397,87 @@ export default function BookRoom() {
           </section>
 
           <section className="book-room__section card">
-            <h2>Proceed to payment</h2>
-            <p className="book-room__section-lead">
-              You&apos;ll receive a GST invoice by email and a WhatsApp confirmation once your booking is confirmed.
-            </p>
-            <ul className="book-room__perks">
-              <li><Icon icon={Receipt} size={ICON.sm} /> CGST &amp; SGST invoice included</li>
-              <li><Icon icon={MessageCircle} size={ICON.sm} /> WhatsApp alerts to you and your host</li>
-              <li><Icon icon={ShieldCheck} size={ICON.sm} /> Secure payment on StayEase</li>
-            </ul>
             <ErrorMessage message={error} />
-            <CancellationPolicy policy={room.policies?.cancellation || 'moderate'} />
-            <label className="book-room__terms">
-              <input
-                type="checkbox"
-                checked={acceptedTerms}
-                onChange={(e) => setAcceptedTerms(e.target.checked)}
-              />
-              <span className="book-room__terms-text">
-                I agree to the{' '}
-                <Link to="/terms" target="_blank" rel="noreferrer">Terms of Service</Link>
-                {' '}and{' '}
-                <Link to="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</Link>
-                , including billing and cancellation charges.
-              </span>
-            </label>
+            {conflictError && (
+              <div className="host-alert-banner" role="alert" style={{ marginBottom: '1rem' }}>
+                <span className="host-alert-banner__dot" aria-hidden="true" />
+                <div>
+                  <strong>Room not available for selected dates</strong>
+                  <p>{conflictError}</p>
+                </div>
+              </div>
+            )}
+            {showWaitlistForm && !waitlistSuccess && (
+              <div className="card" style={{ padding: '1rem', marginBottom: '1rem', background: 'var(--bg-secondary)' }}>
+                <h3>Join Waitlist</h3>
+                <div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="label">Name</label>
+                      <input className="input" value={waitlistName} onChange={(e) => setWaitlistName(e.target.value)} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="label">Phone</label>
+                      <input className="input" value={waitlistPhone} onChange={(e) => setWaitlistPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} required />
+                    </div>
+                  </div>
+                  {waitlistError && <p className="form-error">{waitlistError}</p>}
+                  {waitlistLoading ? <Spinner size={24} label="" /> : (
+                    <button type="button" className="btn btn-primary btn-sm" onClick={handleJoinWaitlist}>Join Waitlist</button>
+                  )}
+                </div>
+              </div>
+            )}
+            {waitlistSuccess && (
+              <p style={{ color: 'var(--success, #16a34a)', marginBottom: '1rem' }}>
+                You&apos;re on the waitlist! We&apos;ll notify you when this room becomes available.
+              </p>
+            )}
+            <LegalAcceptance
+              id="book-room-legal-acceptance"
+              checked={acceptedTerms}
+              onChange={setAcceptedTerms}
+              className="book-room__terms"
+              suffix=", including billing and cancellation charges."
+            />
             <button
               type="submit"
               className="btn btn-primary book-room__submit"
               disabled={submitting || !!dateError || !acceptedTerms || !checkIn || !checkOut}
             >
-              {submitting ? 'Confirming…' : 'Confirm booking'}
+              {submitting ? 'Confirming…' : 'Confirm Booking'}
             </button>
-            <p className="book-room__pay-note">
-              By selecting the button, I agree to the booking terms. You won&apos;t be charged until the booking is confirmed.
-            </p>
           </section>
         </div>
 
         <aside className="book-room__summary card">
-          <div className="book-room__summary-header">
-            {photo?.url ? (
-              <SafeImage src={photo.url} alt="" className="book-room__summary-photo" />
-            ) : (
-              <div className="book-room__summary-photo book-room__summary-photo--placeholder" />
-            )}
-            <div>
-              <h3>{room.title}</h3>
-              {location && (
-                <p className="book-room__summary-loc">
-                  <Icon icon={MapPin} size={ICON.sm} />
-                  {location}
-                </p>
-              )}
-              {room.avg_rating > 0 && (
-                <p className="book-room__summary-rating">
-                  <Icon icon={Star} size={ICON.sm} />
-                  {room.avg_rating.toFixed(2)}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="book-room__summary-rows">
-            <div className="book-room__summary-row">
-              <span>Dates</span>
-              <strong>
-                {checkIn && checkOut
-                  ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)}`
-                  : 'Select dates'}
-              </strong>
-            </div>
-            <div className="book-room__summary-row">
-              <span>Guests</span>
-              <strong>{guests} guest{guests !== 1 ? 's' : ''}</strong>
-            </div>
-            {nights > 0 && (
-              <div className="book-room__summary-row">
-                <span>Duration</span>
-                <strong>{nights} night{nights !== 1 ? 's' : ''}</strong>
-              </div>
-            )}
-          </div>
-
-          {pricingLoading && <p className="book-room__pricing-loading">Updating price…</p>}
+          <h3>Price summary</h3>
+          {pricingLoading && <Spinner label="Calculating price…" />}
           {pricing && <PriceBreakdown pricing={pricing} compact />}
           {!pricing && !pricingLoading && checkIn && checkOut && !dateError && (
-            <p className="book-room__pricing-loading">Enter valid dates to see GST-inclusive total</p>
+            <p className="book-room__pricing-loading">Select valid dates for pricing</p>
           )}
-          {pricing && (
-            <p className="book-room__gst-note">
-              Price includes applicable CGST &amp; SGST for Indian hotel stays.
-            </p>
+          {nights > 0 && pricing && (
+            <p className="book-room__gst-note">{nights} night{nights !== 1 ? 's' : ''} · incl. GST</p>
           )}
         </aside>
       </form>
 
-      <WaitlistModal
-        open={waitlistOpen}
-        onClose={() => setWaitlistOpen(false)}
-        roomId={roomId}
-        checkIn={checkIn}
-        checkOut={checkOut}
-        guestName={user?.name}
-        guestPhone={user?.phone}
+      <ConfirmModal
+        open={confirmOpen}
+        onClose={() => !submitting && setConfirmOpen(false)}
+        onConfirm={handleConfirmBooking}
+        title="Confirm your booking?"
+        message={
+          pricing
+            ? `Book ${room.title} for ${formatCurrency(pricing.total_price)} incl. GST?`
+            : `Confirm booking for ${room.title}?`
+        }
+        confirmLabel="Yes, book now"
+        cancelLabel="Go back"
+        confirmClassName="btn btn-primary"
+        confirming={submitting}
+        error={error}
       />
     </div>
   );

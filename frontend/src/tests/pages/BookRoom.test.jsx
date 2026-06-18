@@ -44,9 +44,9 @@ vi.mock('../../api/api', async () => {
   const actual = await vi.importActual('../../api/api');
   return {
     ...actual,
-    roomsApi: { get: vi.fn() },
+    roomsApi: { get: vi.fn(), alternatives: vi.fn().mockResolvedValue({ data: [] }) },
     pricingApi: { calculate: vi.fn() },
-    bookingsApi: { create: vi.fn(), uploadVerification: vi.fn() },
+    bookingsApi: { create: vi.fn(), pay: vi.fn(), uploadVerification: vi.fn() },
   };
 });
 
@@ -93,8 +93,8 @@ describe('BookRoom', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Request to book')).toBeInTheDocument();
       expect(screen.getByText('Test Room')).toBeInTheDocument();
+      expect(screen.getByText('Guest details')).toBeInTheDocument();
     });
   });
 
@@ -168,10 +168,10 @@ describe('BookRoom', () => {
     });
   });
 
-  it('shows waitlist modal on 409 response', async () => {
+  it('shows unavailable error on 409 response', async () => {
     bookingsApi.create.mockRejectedValue(
       Object.assign(new Error('conflict'), {
-        normalized: { status: 409, message: 'Room unavailable', waitlist: true },
+        normalized: { status: 409, message: 'Room unavailable for selected dates' },
       }),
     );
     const ci = new Date();
@@ -189,10 +189,12 @@ describe('BookRoom', () => {
     await waitFor(() => expect(pricingApi.calculate).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId('price-breakdown')).toBeInTheDocument());
     acceptTerms();
-    fireEvent.click(screen.getByText('Confirm booking'));
+    fireEvent.click(screen.getByText('Confirm Booking'));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Yes, book now'));
     await waitFor(() => expect(bookingsApi.create).toHaveBeenCalled());
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText(/Room unavailable for selected dates/i)).toBeInTheDocument();
     });
   });
 });

@@ -5,6 +5,7 @@ services:
     image: mongo:7
     restart: unless-stopped
     container_name: stayease-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     environment:
       MONGO_INITDB_DATABASE: stayease
     ports:
@@ -12,14 +13,35 @@ services:
     volumes:
       - mongo_data:/data/db
 
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_started
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        until mongosh --host mongo:27017 --eval "db.adminCommand('ping')" >/dev/null 2>&1; do sleep 1; done
+        mongosh --host mongo:27017 --eval "
+          try {
+            rs.status();
+            print('Replica set already initialized');
+          } catch (e) {
+            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]});
+          }
+        "
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     depends_on:
-      - mongo
+      mongo-init:
+        condition: service_completed_successfully
     environment:
-      MONGO_URI: mongodb://mongo:27017
+      MONGO_URI: mongodb://mongo:27017/?replicaSet=rs0
       MONGO_DB_NAME: stayease
       JWT_SECRET: dev-secret-change-in-production
       APP_NAME: StayEase
@@ -41,6 +63,8 @@ services:
       OPEN_METEO_BASE_URL: https://api.open-meteo.com
       GST_RATE: "0.18"
       GST_NUMBER: DEV_GST_NUMBER
+      GUEST_PLATFORM_FEE_PERCENT: "10.0"
+      HOST_PLATFORM_FEE_PERCENT: "3.0"
       FRONTEND_URL: http://localhost:5173
       JWT_EXPIRE_MINUTES: "10080"
     ports:
@@ -60,4 +84,3 @@ services:
 
 volumes:
   mongo_data:
-

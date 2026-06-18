@@ -1,44 +1,33 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Bath,
-  BedDouble,
-  Camera,
   Eye,
-  FileText,
   Settings,
-  Shield,
-  Type,
 } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
-import ImageUploader from '../../components/ImageUploader';
+import ListingEditorArrivalPanel from '../../components/host/ListingEditorArrivalPanel';
+import ListingEditorPhotoTour from '../../components/host/ListingEditorPhotoTour';
+import ListingEditorSpacePanel from '../../components/host/ListingEditorSpacePanel';
 import { Icon, ICON } from '../../components/ui/Icon';
+import { ARRIVAL_SECTIONS, SPACE_SECTIONS } from '../../constants/listingEditorSections';
+import { arrivalNavSummary, spaceNavSummary } from '../../utils/listingEditorUtils';
 import { roomsApi } from '../../api/api';
-
-const SPACE_SECTIONS = [
-  { id: 'photos', label: 'Photo tour', icon: Camera },
-  { id: 'title', label: 'Title', icon: Type },
-  { id: 'type', label: 'Property type', icon: BedDouble },
-  { id: 'sleeping', label: 'Sleeping arrangements', icon: BedDouble },
-];
-
-const ARRIVAL_SECTIONS = [
-  { id: 'checkin', label: 'Check-in & checkout', icon: FileText },
-  { id: 'safety', label: 'Guest safety', icon: Shield },
-  { id: 'rules', label: 'House rules', icon: Shield },
-];
 
 export default function ListingEditor() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [room, setRoom] = useState(null);
   const [tab, setTab] = useState('space');
   const [section, setSection] = useState('photos');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draftRoom, setDraftRoom] = useState(null);
 
   const load = () => {
     roomsApi.get(id)
@@ -49,15 +38,86 @@ export default function ListingEditor() {
 
   useEffect(() => { load(); }, [id]);
 
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    const sectionParam = searchParams.get('section');
+    if (tabParam === 'space' || tabParam === 'arrival') setTab(tabParam);
+    if (sectionParam) setSection(sectionParam);
+  }, [id, searchParams]);
+
+  useEffect(() => {
+    setDraftRoom(null);
+  }, [section, tab]);
+
+  const handleSave = async (updates) => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const { data } = await roomsApi.update(id, updates);
+      setRoom(data);
+      setDraftRoom(null);
+    } catch (err) {
+      setSaveError(err.normalized?.message || 'Could not save changes');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDraftChange = (patch) => {
+    setDraftRoom((prev) => {
+      const base = prev || room;
+      return {
+        ...base,
+        ...patch,
+        arrival_guide: patch.arrival_guide
+          ? { ...(base.arrival_guide || {}), ...patch.arrival_guide }
+          : base.arrival_guide,
+        policies: patch.policies
+          ? { ...(base.policies || {}), ...patch.policies }
+          : base.policies,
+        location: patch.location
+          ? { ...(base.location || {}), ...patch.location }
+          : base.location,
+      };
+    });
+  };
+
   const handlePhotoUpload = async (file) => {
     setUploading(true);
     try {
       const { data } = await roomsApi.uploadPhoto(id, file);
-      setRoom((r) => ({ ...r, photos: data.photos }));
+      setRoom((r) => {
+        const prev = r?.photos || [];
+        const next = [...prev, data].filter((p) => p && p.url);
+        const hasPrimary = next.some((p) => p.is_primary);
+        if (!hasPrimary && next.length) next[0] = { ...next[0], is_primary: true };
+        return { ...r, photos: next };
+      });
     } catch (err) {
       setError(err.normalized?.message || 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleReorderPhotos = async (next) => {
+    setRoom((r) => ({ ...r, photos: next }));
+    try {
+      await roomsApi.reorderPhotos(id, next.map((p) => p.public_id).filter(Boolean));
+    } catch {
+      // keep local order on failure
+    }
+  };
+
+  const handleDeletePhoto = async (photo) => {
+    const pid = photo?.public_id;
+    if (!pid) return;
+
+    try {
+      await roomsApi.deletePhoto(id, pid);
+      setRoom((r) => ({ ...r, photos: (r?.photos || []).filter((p) => p?.public_id !== pid) }));
+    } catch (err) {
+      throw new Error(err.normalized?.message || 'Could not delete photo');
     }
   };
 
@@ -66,6 +126,7 @@ export default function ListingEditor() {
   if (!room) return null;
 
   const sections = tab === 'space' ? SPACE_SECTIONS : ARRIVAL_SECTIONS;
+  const displayRoom = draftRoom || room;
   const photoCount = room.photos?.length || 0;
 
   return (
@@ -76,7 +137,7 @@ export default function ListingEditor() {
             <Icon icon={ArrowLeft} size={ICON.md} />
           </Link>
           <h2>Listing editor</h2>
-          <button type="button" className="host-icon-btn" aria-label="Settings" onClick={() => navigate(`/host/rooms/${id}/preferences`)}>
+          <button type="button" className="host-icon-btn" aria-label="Settings" onClick={() => navigate(`/host/listings/setup?roomId=${id}`)}>
             <Icon icon={Settings} size={ICON.md} />
           </button>
         </div>
@@ -87,39 +148,51 @@ export default function ListingEditor() {
         </div>
 
         {!room.is_available && (
-          <div className="host-editor__alert">
+          <Link to={`/host/listings/setup?roomId=${id}`} className="host-editor__alert host-editor__alert--link">
             <span className="host-alert-banner__dot" />
             Complete required steps
-          </div>
+          </Link>
         )}
 
-        <nav className="host-editor__nav">
-          {sections.map(({ id: sid, label, icon }) => {
-            const summary = sid === 'photos'
-              ? `${photoCount} photo${photoCount !== 1 ? 's' : ''}`
-              : sid === 'title'
-                ? room.title || 'Add title'
-                : sid === 'type'
-                  ? `${room.room_category} · ${room.bed_configuration?.replace(/_/g, ' ')}`
-                  : sid === 'sleeping'
-                    ? `${room.max_guests} guests · ${room.bed_configuration?.replace(/_/g, ' ')}`
-                    : sid === 'checkin'
-                      ? `${room.policies?.check_in_time || '14:00'} check-in`
-                      : 'Add details';
+        <nav className="host-editor__nav" aria-label="Listing sections">
+          {sections.map(({ id: sid, label, split }) => {
+            const summary = tab === 'space'
+              ? spaceNavSummary(sid, displayRoom)
+              : arrivalNavSummary(sid, displayRoom);
+
             return (
               <button
                 key={sid}
                 type="button"
-                className={`host-editor__nav-item ${section === sid ? 'host-editor__nav-item--active' : ''}`}
+                className={`host-editor__nav-item ${section === sid ? 'host-editor__nav-item--active' : ''} ${split ? 'host-editor__nav-item--split' : ''}`}
                 onClick={() => setSection(sid)}
               >
-                <Icon icon={icon} size={ICON.sm} />
-                <div>
-                  <strong>{label}</strong>
-                  <span>{summary}</span>
+                <div className="host-editor__nav-content">
+                  {!split ? (
+                    <>
+                      <span className="host-editor__nav-label">{label}</span>
+                      <span className="host-editor__nav-summary">
+                        {typeof summary === 'string' ? summary : 'Add details'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="host-editor__nav-label">{label}</span>
+                      <div className="host-editor__nav-split">
+                        <div>
+                          <span className="host-editor__nav-split-key">Check-in</span>
+                          <span className="host-editor__nav-split-val">{summary.checkIn}</span>
+                        </div>
+                        <div>
+                          <span className="host-editor__nav-split-key">Checkout</span>
+                          <span className="host-editor__nav-split-val">{summary.checkOut}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 {sid === 'photos' && photoCount > 0 && (
-                  <div className="host-editor__thumb">
+                  <div className="host-editor__thumb" aria-hidden>
                     <img src={room.photos[0].url} alt="" />
                   </div>
                 )}
@@ -128,78 +201,49 @@ export default function ListingEditor() {
           })}
         </nav>
 
-        <Link to={`/rooms/${id}`} className="host-editor__preview">
+        <Link to={`/host/rooms/${id}/view`} className="host-editor__preview">
           <Icon icon={Eye} size={ICON.sm} />
           View
         </Link>
       </aside>
 
       <main className="host-editor__main">
-        {section === 'photos' && (
+        {tab === 'space' && section === 'photos' && (
           <>
-            <h1>Photo tour</h1>
-            <p className="host-page__subtitle">Manage photos for your {room.room_category.toLowerCase()} room. Guests love seeing clean, well-lit spaces.</p>
-            <div className="host-editor__photo-zones">
-              <div className="host-editor__photo-zone">
-                <Icon icon={BedDouble} size={ICON.xl} />
-                <strong>Bedroom</strong>
-                <span>{photoCount ? `${photoCount} photos` : 'Add photos'}</span>
-              </div>
-              <div className="host-editor__photo-zone">
-                <Icon icon={Bath} size={ICON.xl} />
-                <strong>Bathroom</strong>
-                <span>Add photos</span>
-              </div>
-            </div>
-            <ImageUploader photos={room.photos || []} onUpload={handlePhotoUpload} uploading={uploading} />
-            <Link to={`/host/rooms/edit/${id}`} className="btn btn-outline" style={{ marginTop: '1rem' }}>Edit all details</Link>
+            <p className="host-page__subtitle host-editor__photo-tour-intro">
+              Manage photos and add details. Guests will only see your tour if every room has a photo.
+            </p>
+            <ListingEditorPhotoTour
+              room={room}
+              roomId={id}
+              photos={room.photos || []}
+              uploading={uploading}
+              onUpload={handlePhotoUpload}
+              onDelete={handleDeletePhoto}
+            />
           </>
         )}
 
-        {section === 'title' && (
-          <>
-            <h1>Title</h1>
-            <p className="host-page__subtitle">{room.title || 'No title yet'}</p>
-            <Link to={`/host/rooms/edit/${id}`} className="btn btn-primary">Edit title &amp; description</Link>
-          </>
+        {tab === 'space' && section !== 'photos' && (
+          <ListingEditorSpacePanel
+            section={section}
+            room={room}
+            onSave={handleSave}
+            onDraftChange={handleDraftChange}
+            saving={saving}
+            error={saveError}
+          />
         )}
 
-        {section === 'type' && (
-          <>
-            <h1>Property type</h1>
-            <p className="host-page__subtitle">{room.room_category} · {room.food_preference} · {room.view_type?.replace(/_/g, ' ') || 'standard view'}</p>
-          </>
-        )}
-
-        {section === 'sleeping' && (
-          <>
-            <h1>Sleeping arrangements</h1>
-            <p className="host-page__subtitle">{room.max_guests} guests · {room.bed_configuration?.replace(/_/g, ' ')}</p>
-          </>
-        )}
-
-        {section === 'checkin' && (
-          <>
-            <h1>Check-in &amp; checkout</h1>
-            <div className="host-editor__form card">
-              <label className="label">Check-in from</label>
-              <p>{room.policies?.check_in_time || '14:00'}</p>
-              <label className="label" style={{ marginTop: '1rem' }}>Checkout by</label>
-              <p>{room.policies?.check_out_time || '11:00'}</p>
-            </div>
-          </>
-        )}
-
-        {(section === 'safety' || section === 'rules') && (
-          <>
-            <h1>{section === 'safety' ? 'Guest safety' : 'House rules'}</h1>
-            <div className="host-editor__form card">
-              <p>Smoking: {room.smoking_policy?.replace(/_/g, ' ') || 'non smoking'}</p>
-              <p>Alcohol: {room.alcohol_policy?.replace(/_/g, ' ') || 'non alcohol'}</p>
-              <p>Cancellation: {room.policies?.cancellation || 'moderate'}</p>
-            </div>
-            <Link to={`/host/rooms/edit/${id}`} className="btn btn-outline">Edit policies</Link>
-          </>
+        {tab === 'arrival' && (
+          <ListingEditorArrivalPanel
+            section={section}
+            room={room}
+            onSave={handleSave}
+            onDraftChange={handleDraftChange}
+            saving={saving}
+            error={saveError}
+          />
         )}
       </main>
     </div>

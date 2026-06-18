@@ -21,7 +21,17 @@ ViewType = Literal[
     "pool_view",
     "none",
 ]
-
+FacingSide = Literal[
+    "north",
+    "south",
+    "east",
+    "west",
+    "north_east",
+    "north_west",
+    "south_east",
+    "south_west",
+    "none",
+]
 
 class Photo(BaseModel):
     url: str
@@ -40,6 +50,8 @@ class Location(BaseModel):
     lat: float
     lng: float
     address: str
+    state: Optional[str] = None
+    pincode: Optional[str] = None
 
 
 class Policies(BaseModel):
@@ -49,6 +61,18 @@ class Policies(BaseModel):
     pet_allowed: bool = False
     smoking_allowed: bool = False
     alcohol_allowed: bool = False
+
+
+class ArrivalGuide(BaseModel):
+    check_in_end_time: Optional[str] = None
+    directions: Optional[str] = None
+    check_in_method: Optional[str] = None
+    wifi_network: Optional[str] = None
+    wifi_password: Optional[str] = None
+    house_manual: Optional[str] = None
+    checkout_instructions: Optional[str] = None
+    guidebook: Optional[str] = None
+    interaction_preferences: Optional[str] = None
 
 
 class RoomCreate(BaseModel):
@@ -68,8 +92,13 @@ class RoomCreate(BaseModel):
     alcohol_policy: AlcoholPolicy
     view_type: ViewType = "none"
     has_balcony: bool = False
+    facing_side: FacingSide = "none"
+    floor_label: Optional[str] = Field(default=None, max_length=40)
+    floor_number: Optional[int] = Field(default=None, ge=0, le=200)
+    view_description: Optional[str] = Field(default=None, max_length=300)
 
     policies: Policies
+    arrival_guide: ArrivalGuide = Field(default_factory=ArrivalGuide)
 
     @field_validator("room_number")
     @classmethod
@@ -95,7 +124,13 @@ class RoomUpdate(BaseModel):
     alcohol_policy: Optional[AlcoholPolicy] = None
     view_type: Optional[ViewType] = None
     has_balcony: Optional[bool] = None
+    facing_side: Optional[FacingSide] = None
+    floor_label: Optional[str] = Field(default=None, max_length=40)
+    floor_number: Optional[int] = Field(default=None, ge=0, le=200)
+    view_description: Optional[str] = Field(default=None, max_length=300)
     policies: Optional[Policies] = None
+    arrival_guide: Optional[ArrivalGuide] = None
+    blocked_dates: Optional[list[str]] = None
 
 
 class RoomInDB(MongoModel):
@@ -119,6 +154,12 @@ class RoomInDB(MongoModel):
     alcohol_policy: AlcoholPolicy
     view_type: ViewType = "none"
     has_balcony: bool = False
+    facing_side: FacingSide = "none"
+    floor_label: Optional[str] = None
+    floor_number: Optional[int] = None
+    view_description: Optional[str] = None
     policies: Policies
+    arrival_guide: ArrivalGuide = Field(default_factory=ArrivalGuide)
+    blocked_dates: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
 

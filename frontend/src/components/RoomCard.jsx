@@ -8,7 +8,15 @@ import SafeImage from './SafeImage';
 import { Icon, ICON } from './ui/Icon';
 import { getPrimaryRoomImage } from '../utils/roomImages';
 
-export default function RoomCard({ room, matchScore, onWishlistToggle, nights = 2 }) {
+export default function RoomCard({
+  room,
+  matchScore,
+  onWishlistToggle,
+  nights = 2,
+  compareMode = false,
+  compareSelected = false,
+  onCompareToggle,
+}) {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const { openAuthGate } = useOnboarding();
@@ -31,8 +39,8 @@ export default function RoomCard({ room, matchScore, onWishlistToggle, nights = 
       return;
     }
     try {
-      await wishlistApi.add(id);
-      setWishlisted((v) => !v);
+      const { data } = await wishlistApi.toggle(id);
+      setWishlisted(data.wishlisted ?? data.added);
       await refreshUser();
       onWishlistToggle?.(id);
     } catch {
@@ -80,6 +88,20 @@ export default function RoomCard({ room, matchScore, onWishlistToggle, nights = 
           <span className="room-card__unavailable" data-testid="unavailable-badge">
             Unavailable
           </span>
+        )}
+        {compareMode && (
+          <label
+            className="room-card__compare"
+            style={{ position: 'absolute', top: 8, left: 8, background: 'var(--card-bg)', padding: '4px 8px', borderRadius: 6, fontSize: '0.75rem', zIndex: 2 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={compareSelected}
+              onChange={() => onCompareToggle?.(id)}
+            />
+            {' '}Compare
+          </label>
         )}
       </div>
       <div className="room-card__body">

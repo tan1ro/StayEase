@@ -11,21 +11,28 @@ router = APIRouter(prefix="/api/wishlist", tags=["wishlist"])
 
 
 @router.post("/{room_id}")
-async def add_to_wishlist(room_id: str, user: dict = Depends(get_current_user)):
+async def toggle_wishlist(room_id: str, user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
     room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    wishlist = user.get("wishlist", [])
-    if room_id not in wishlist:
-        wishlist.append(room_id)
+    wishlist = list(user.get("wishlist", []))
+    if room_id in wishlist:
+        wishlist = [rid for rid in wishlist if rid != room_id]
         await database.collection("users").update_one(
             {"_id": user["_id"]},
             {"$set": {"wishlist": wishlist}},
         )
-    return {"message": "Added to wishlist", "wishlist": wishlist}
+        return {"message": "Removed from wishlist", "wishlist": wishlist, "wishlisted": False, "added": False}
+
+    wishlist = list(dict.fromkeys([*wishlist, room_id]))
+    await database.collection("users").update_one(
+        {"_id": user["_id"]},
+        {"$set": {"wishlist": wishlist}},
+    )
+    return {"message": "Added to wishlist", "wishlist": wishlist, "wishlisted": True, "added": True}
 
 
 @router.get("")

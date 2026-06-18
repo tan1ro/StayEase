@@ -5,10 +5,10 @@ from bson import ObjectId
 from database import database
 
 
-async def sync_room_review_stats(room_id: str) -> dict[str, float | int]:
+async def sync_room_review_stats(room_id: str, *, session=None) -> dict[str, float | int]:
     reviews = (
         await database.collection("reviews")
-        .find({"room_id": room_id})
+        .find({"room_id": room_id}, session=session)
         .to_list(500)
     )
     if reviews:
@@ -22,6 +22,7 @@ async def sync_room_review_stats(room_id: str) -> dict[str, float | int]:
         await database.collection("rooms").update_one(
             {"_id": ObjectId(room_id)},
             {"$set": {"avg_rating": avg_rating, "total_reviews": total_reviews}},
+            session=session,
         )
 
     return {"avg_rating": avg_rating, "total_reviews": total_reviews}

@@ -1,8 +1,16 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Icon, ICON } from './ui/Icon';
 
-export default function Modal({ open, onClose, title, children, size = 'md' }) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  hideHeader = false,
+}) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -18,20 +26,33 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div
-        className={`modal modal--${size}`}
+        className={`modal modal--${size}${hideHeader ? ' modal--bare' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal__header">
-          {title && <h2 className="modal__title">{title}</h2>}
-          <button type="button" className="modal__close" onClick={onClose} aria-label="Close">
+        {!hideHeader && (
+          <div className="modal__header">
+            {title && <h2 className="modal__title">{title}</h2>}
+            <button type="button" className="modal__close" onClick={onClose} aria-label="Close">
+              <Icon icon={X} size={ICON.lg} />
+            </button>
+          </div>
+        )}
+        {hideHeader && (
+          <button
+            type="button"
+            className="modal__close modal__close--floating"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <Icon icon={X} size={ICON.lg} />
           </button>
-        </div>
+        )}
         <div className="modal__body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

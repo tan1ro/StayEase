@@ -2,15 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HostDashboard from '../../pages/host/HostDashboard';
-import { analyticsApi } from '../../api/api';
+import { analyticsApi, bookingsApi } from '../../api/api';
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'host1', _id: 'host1', role: 'host' } }),
+}));
 
 vi.mock('../../api/api', async () => {
   const actual = await vi.importActual('../../api/api');
   return {
     ...actual,
     analyticsApi: {
-      hostDashboard: vi.fn(),
+      dashboard: vi.fn(),
       revenue: vi.fn(),
+    },
+    bookingsApi: {
+      list: vi.fn(),
     },
   };
 });
@@ -18,26 +25,18 @@ vi.mock('../../api/api', async () => {
 const mockDashboard = {
   total_rooms: 5,
   active_bookings: 3,
-  month_revenue: 125000,
+  total_revenue: 125000,
   avg_rating: 4.2,
-  recent_bookings: [
-    {
-      _id: 'b1',
-      guest_name: 'Alice',
-      check_in_date: '2025-07-01',
-      check_out_date: '2025-07-03',
-      total_price: 5000,
-      host_payout: 4850,
-      subtotal: 5000,
-      status: 'confirmed',
-    },
+  monthly_revenue: [
+    { month: 'Jan', revenue: 10000, bookings: 2 },
+    { month: 'Feb', revenue: 15000, bookings: 3 },
   ],
 };
 
 describe('HostDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    analyticsApi.hostDashboard.mockResolvedValue({ data: mockDashboard });
+    analyticsApi.dashboard.mockResolvedValue({ data: mockDashboard });
     analyticsApi.revenue.mockResolvedValue({
       data: {
         months: [
@@ -45,6 +44,20 @@ describe('HostDashboard', () => {
           { month: 2, revenue: 15000, gst_collected: 1800 },
         ],
       },
+    });
+    bookingsApi.list.mockResolvedValue({
+      data: [
+        {
+          _id: 'b1',
+          guest_name: 'Alice',
+          check_in_date: '2025-07-01',
+          check_out_date: '2025-07-03',
+          total_price: 5000,
+          host_payout: 4850,
+          subtotal: 5000,
+          status: 'confirmed',
+        },
+      ],
     });
   });
 
@@ -66,7 +79,7 @@ describe('HostDashboard', () => {
   it('revenue chart renders', async () => {
     render(<MemoryRouter><HostDashboard /></MemoryRouter>);
     await waitFor(() => {
-      expect(screen.getByText('Revenue (last 6 months)')).toBeInTheDocument();
+      expect(screen.getByText('Monthly revenue')).toBeInTheDocument();
     });
   });
 

@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ErrorMessage from '../../components/ErrorMessage';
 import Spinner from '../../components/Spinner';
+import { setToken, setStoredUser } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
-import { defaultRouteForUser } from '../../utils/roles';
+import { isHostRole } from '../../utils/roles';
+
+const DEMO_GUEST = { email: 'guest@stayease.com', password: 'demo123' };
+const DEMO_HOST = { email: 'host@stayease.com', password: 'demo123' };
 
 export default function Login() {
   const { login } = useAuth();
@@ -13,18 +17,35 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const doLogin = async (creds) => {
+    if (!creds.email?.trim() || !creds.password) {
+      setError('Email and password are required');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const user = await login(email, password);
-      navigate(defaultRouteForUser(user));
+      const user = await login(creds.email.trim(), creds.password);
+      const token = localStorage.getItem('stayease_token');
+      if (token) setToken(token);
+      setStoredUser(user);
+      navigate(isHostRole(user.role) ? '/host' : '/');
     } catch (err) {
       setError(err.normalized?.message || 'Login failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    doLogin({ email, password });
+  };
+
+  const demoLogin = (creds) => {
+    setEmail(creds.email);
+    setPassword(creds.password);
+    doLogin(creds);
   };
 
   return (
@@ -46,36 +67,21 @@ export default function Login() {
             <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Log in</button>
           )}
         </form>
-        <p className="login-demo-hint">
-          Demo host: <code>host@stayease.com</code> / <code>Host@1234</code>
-          <br />
-          Demo tourist: <code>tourist@stayease.com</code> / <code>Guest@1234</code>
-        </p>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline btn-sm" style={{ flex: 1 }} disabled={loading} onClick={() => demoLogin(DEMO_GUEST)}>
+            Demo guest login
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" style={{ flex: 1 }} disabled={loading} onClick={() => demoLogin(DEMO_HOST)}>
+            Demo host login
+          </button>
+        </div>
         <p style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
           Don&apos;t have an account? <Link to="/register">Sign up</Link>
         </p>
       </div>
       <style>{`
-        .auth-page {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 60vh;
-        }
-        .auth-card {
-          width: 100%;
-          max-width: 420px;
-          padding: 2rem;
-        }
-        .login-demo-hint {
-          margin-top: 1rem;
-          text-align: center;
-          font-size: 0.82rem;
-          color: var(--text-secondary);
-        }
-        .login-demo-hint code {
-          color: var(--primary);
-        }
+        .auth-page { display: flex; justify-content: center; align-items: center; min-height: 60vh; }
+        .auth-card { width: 100%; max-width: 420px; padding: 2rem; }
       `}</style>
     </div>
   );

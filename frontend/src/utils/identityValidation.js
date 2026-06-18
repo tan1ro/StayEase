@@ -4,6 +4,21 @@ const ID_HINTS = {
   passport: 'Passport number (7–9 characters)',
 };
 
+const ID_TYPE_LABELS = {
+  aadhar: 'Aadhar',
+  pan: 'PAN',
+  passport: 'Passport',
+};
+
+export function formatIdType(type) {
+  return ID_TYPE_LABELS[type] || String(type || '').replace(/_/g, ' ');
+}
+
+export function formatSavedIdNumber(type, number = '') {
+  if (type === 'aadhar') return formatAadharDisplay(number);
+  return String(number || '').trim();
+}
+
 export function idNumberHint(type) {
   return ID_HINTS[type] || 'Government ID number';
 }

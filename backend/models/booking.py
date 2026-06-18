@@ -52,6 +52,8 @@ class BookingCreate(BaseModel):
     guest_photo_url: Optional[str] = None
     identity_proof: Optional[BookingIdentityProof] = None
     host_message: Optional[str] = Field(None, max_length=500)
+    preferred_room_number: Optional[str] = Field(None, max_length=20)
+    room_preference_notes: Optional[str] = Field(None, max_length=300)
 
 
 class BookingInDB(MongoModel):
@@ -84,4 +86,6 @@ class BookingInDB(MongoModel):
     booking_for: BookingFor = "self"
     check_in_verification: Optional[CheckInVerification] = None
     host_message: Optional[str] = None
+    preferred_room_number: Optional[str] = None
+    room_preference_notes: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)

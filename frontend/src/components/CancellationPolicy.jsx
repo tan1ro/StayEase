@@ -51,10 +51,6 @@ export default function CancellationPolicy({ policy = 'moderate', compact = fals
           <li key={rule}>{rule}</li>
         ))}
       </ul>
-      <p className="cancellation-policy__note">
-        GST is included in all totals. Refunds are processed to your original payment method within 5–7 business days.
-        See our <Link to="/terms#billing">billing terms</Link> and <Link to="/terms#cancellation">cancellation policy</Link>.
-      </p>
     </div>
   );
 }

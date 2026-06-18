@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Minus, Plus, Search, X } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 import LocationPicker from './LocationPicker';
 import {
+  applyLocationToParams,
   buildLocationSelection,
   readLocationFromParams,
-  syncSearchParams,
 } from '../utils/searchState';
 import { formatRangeLabel } from '../utils/dates';
 
 export default function MobileSearchModal({ open, onClose }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const initial = readLocationFromParams(searchParams);
   const [activeSection, setActiveSection] = useState('where');
   const [where, setWhere] = useState(initial.label);
@@ -44,13 +46,21 @@ export default function MobileSearchModal({ open, onClose }) {
 
   const applySearch = () => {
     const location = buildLocationSelection({ where, locationMode, coords, searchParams });
-    syncSearchParams(searchParams, setSearchParams, {
-      location,
-      checkIn,
-      checkOut,
-      guests: String(guests),
-    });
+    const next = new URLSearchParams(searchParams);
+    applyLocationToParams(next, location);
+    if (checkIn) next.set('check_in', checkIn);
+    else next.delete('check_in');
+    if (checkOut) next.set('check_out', checkOut);
+    else next.delete('check_out');
+    if (guests && guests !== 2) next.set('guests', String(guests));
+    else next.delete('guests');
+
     onClose();
+    if (pathname !== '/') {
+      navigate({ pathname: '/', search: next.toString() });
+    } else {
+      setSearchParams(next);
+    }
   };
 
   const clearAll = () => {

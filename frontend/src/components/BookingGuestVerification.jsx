@@ -7,6 +7,8 @@ import VerificationImageUpload from './VerificationImageUpload';
 import { validateFaceInImage } from '../utils/faceValidation';
 import {
   formatAadharDisplay,
+  formatIdType,
+  formatSavedIdNumber,
   idNumberHint,
   normalizeIdNumber,
   validateIdNumber,
@@ -334,21 +336,32 @@ export default function BookingGuestVerification({ value, onChange, user, error 
       ) : (
         <div className="booking-guest-verification__panel">
           {hasSavedId && (
-            <label className="booking-guest-verification__saved">
-              <input
-                type="checkbox"
-                checked={value.useSavedId}
-                onChange={(e) => {
-                  const useSavedId = e.target.checked;
-                  let next = { ...value, useSavedId };
-                  if (useSavedId) next = clearIdUpload(next);
-                  onChange(next);
-                }}
-              />
-              <span>
-                Use saved ID on file ({savedId.type}: {savedId.number})
-              </span>
-            </label>
+            <div className="booking-guest-verification__saved-wrap">
+              <label className="booking-guest-verification__saved" htmlFor="use-saved-id">
+                <input
+                  id="use-saved-id"
+                  type="checkbox"
+                  checked={value.useSavedId}
+                  onChange={(e) => {
+                    const useSavedId = e.target.checked;
+                    let next = { ...value, useSavedId };
+                    if (useSavedId) next = clearIdUpload(next);
+                    onChange(next);
+                  }}
+                />
+                <span className="booking-guest-verification__saved-text">
+                  <strong>Use saved ID on file</strong>
+                  <span className="booking-guest-verification__saved-meta">
+                    {formatIdType(savedId.type)} · {formatSavedIdNumber(savedId.type, savedId.number)}
+                  </span>
+                </span>
+              </label>
+              {value.useSavedId && (
+                <p className="booking-guest-verification__saved-confirm">
+                  Your profile ID will be shared with the property for check-in verification.
+                </p>
+              )}
+            </div>
           )}
 
           {!value.useSavedId && (

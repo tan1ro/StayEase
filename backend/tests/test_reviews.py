@@ -5,6 +5,56 @@ from bson import ObjectId
 from models.common import utc_now
 
 
+async def test_property_reviews_aggregate(client, guest_token, seed_data, mock_db):
+    check_in = date.today() - timedelta(days=10)
+    check_out = check_in + timedelta(days=2)
+    booking = await mock_db["bookings"].insert_one(
+        {
+            "room_id": seed_data["room2_id"],
+            "guest_id": seed_data["guest_id"],
+            "host_id": seed_data["host_id"],
+            "guest_name": "Test Guest",
+            "guest_phone": "9123456789",
+            "guest_email": "guest@test.com",
+            "check_in_date": check_in.isoformat(),
+            "check_out_date": check_out.isoformat(),
+            "total_nights": 2,
+            "num_guests": 1,
+            "base_price": 3500.0,
+            "final_price_per_night": 3500.0,
+            "price_breakdown": [],
+            "subtotal": 7000.0,
+            "gst_rate": 0.12,
+            "gst_amount": 840.0,
+            "total_price": 7840.0,
+            "offer_code": None,
+            "discount_amount": 0.0,
+            "payment_status": "paid",
+            "status": "completed",
+            "invoice_url": None,
+            "created_at": utc_now(),
+        }
+    )
+    await client.post(
+        "/api/reviews",
+        headers={"Authorization": f"Bearer {guest_token}"},
+        json={
+            "booking_id": str(booking.inserted_id),
+            "rating": 5,
+            "title": "Great hotel",
+            "body": "Loved the property overall",
+            "would_recommend": True,
+            "photos": [],
+        },
+    )
+
+    res = await client.get(f"/api/reviews/property/{seed_data['room1_id']}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total_reviews"] >= 1
+    assert any(r.get("room_number") for r in body["reviews"])
+
+
 async def test_eligible_review_for_room(client, guest_token, seed_data, mock_db):
     check_in = date.today() - timedelta(days=10)
     check_out = check_in + timedelta(days=2)

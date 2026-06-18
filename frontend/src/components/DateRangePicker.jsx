@@ -26,6 +26,7 @@ export default function DateRangePicker({
   start = '',
   end = '',
   onChange,
+  onFocus,
   min,
   max,
   variant = 'input',
@@ -68,7 +69,10 @@ export default function DateRangePicker({
     };
   }, [open, start, end]);
 
-  const openPicker = () => setOpen(true);
+  const openPicker = () => {
+    onFocus?.();
+    setOpen(true);
+  };
 
   const handleDateClick = (iso) => {
     if (!start || (start && end) || compareISO(iso, start) < 0) {

@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import date
 
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
-from database import database
+from database import get_database
 from services.pricing import calculate_dynamic_pricing
 
 router = APIRouter(prefix="/api/pricing", tags=["pricing"])
@@ -20,18 +21,21 @@ class PricingRequest(BaseModel):
 
 
 @router.post("/calculate")
-async def calculate_price(payload: PricingRequest):
+async def calculate_price(
+    payload: PricingRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     if payload.check_out <= payload.check_in:
         raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
     if not ObjectId.is_valid(payload.room_id):
         raise HTTPException(status_code=404, detail="Room not found")
-    room = await database.collection("rooms").find_one({"_id": ObjectId(payload.room_id)})
+    room = await db["rooms"].find_one({"_id": ObjectId(payload.room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
     offer = None
     if payload.offer_code:
-        offer = await database.collection("offers").find_one(
+        offer = await db["offers"].find_one(
             {"code": payload.offer_code.upper(), "is_active": True}
         )
         if not offer:
@@ -45,4 +49,6 @@ async def calculate_price(payload: PricingRequest):
         check_in=payload.check_in,
         check_out=payload.check_out,
         offer=offer,
+        view_type=room.get("view_type"),
+        facing_side=room.get("facing_side"),
     )

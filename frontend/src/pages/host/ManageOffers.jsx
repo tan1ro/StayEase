@@ -3,7 +3,17 @@ import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import Badge from '../../components/Badge';
 import DatePicker from '../../components/DatePicker';
-import { offersApi } from '../../api/api';
+import { deleteOffer, formatCurrency, offersApi } from '../../api/api';
+
+function isExpired(offer) {
+  const today = new Date().toISOString().split('T')[0];
+  return offer.valid_until && offer.valid_until < today;
+}
+
+function usagePercent(offer) {
+  if (!offer.usage_limit) return 0;
+  return Math.min(100, Math.round(((offer.used_count || 0) / offer.usage_limit) * 100));
+}
 
 export default function ManageOffers() {
   const [offers, setOffers] = useState([]);
@@ -50,6 +60,16 @@ export default function ManageOffers() {
     load();
   };
 
+  const remove = async (offer) => {
+    if (!window.confirm(`Delete offer ${offer.code}?`)) return;
+    try {
+      await deleteOffer(offer._id);
+      load();
+    } catch (err) {
+      setError(err.normalized?.message || 'Delete failed');
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -70,6 +90,11 @@ export default function ManageOffers() {
           <div className="form-group"><label className="label">Value</label><input type="number" className="input" value={form.value} onChange={(e) => setForm({ ...form, value: Number(e.target.value) })} /></div>
         </div>
         <div className="form-row">
+          <div className="form-group"><label className="label">Min booking amount</label><input type="number" className="input" value={form.min_booking_amount} onChange={(e) => setForm({ ...form, min_booking_amount: Number(e.target.value) })} /></div>
+          <div className="form-group"><label className="label">Max discount</label><input type="number" className="input" value={form.max_discount} onChange={(e) => setForm({ ...form, max_discount: Number(e.target.value) })} /></div>
+          <div className="form-group"><label className="label">Usage limit</label><input type="number" className="input" value={form.usage_limit} onChange={(e) => setForm({ ...form, usage_limit: Number(e.target.value) })} /></div>
+        </div>
+        <div className="form-row">
           <div className="form-group">
             <DatePicker label="Valid from" value={form.valid_from} onChange={(v) => setForm({ ...form, valid_from: v })} required />
           </div>
@@ -82,27 +107,42 @@ export default function ManageOffers() {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>Code</th><th>Type</th><th>Value</th><th>Used</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>Code</th><th>Type</th><th>Value</th><th>Min amount</th><th>Usage</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {offers.map((o) => (
-              <tr key={o._id}>
-                <td>{o.code}</td>
-                <td>{o.type}</td>
-                <td>{o.value}{o.type === 'percentage' ? '%' : ' INR'}</td>
-                <td>{o.used_count}/{o.usage_limit}</td>
-                <td>
-                  <Badge variant={o.is_active ? 'success' : 'danger'}>
-                    {o.valid_until < new Date().toISOString().split('T')[0] ? 'Expired' : o.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </td>
-                <td>
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => toggle(o)}>
-                    {o.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {offers.map((o) => {
+              const expired = isExpired(o);
+              const pct = usagePercent(o);
+              return (
+                <tr key={o._id}>
+                  <td><strong>{o.code}</strong></td>
+                  <td>{o.type}</td>
+                  <td>{o.value}{o.type === 'percentage' ? '%' : ' INR'}</td>
+                  <td>{formatCurrency(o.min_booking_amount || 0)}</td>
+                  <td style={{ minWidth: 140 }}>
+                    <div style={{ fontSize: '0.85rem', marginBottom: 4 }}>{o.used_count || 0}/{o.usage_limit || '∞'}</div>
+                    {o.usage_limit ? (
+                      <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: pct >= 90 ? '#E85D75' : '#4F7FE8' }} />
+                      </div>
+                    ) : null}
+                  </td>
+                  <td>
+                    <Badge variant={expired ? 'danger' : o.is_active ? 'success' : 'warning'}>
+                      {expired ? 'Expired' : o.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </td>
+                  <td style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {!expired && (
+                      <button type="button" className="btn btn-outline btn-sm" onClick={() => toggle(o)}>
+                        {o.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => remove(o)}>Delete</button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

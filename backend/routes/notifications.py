@@ -18,7 +18,7 @@ async def list_notifications(user: dict = Depends(get_current_user)):
         await database.collection("notifications")
         .find({"user_id": str(user["_id"])})
         .sort("sent_at", -1)
-        .to_list(100)
+        .to_list(20)
     )
     return [serialize_doc(i) for i in items]
 

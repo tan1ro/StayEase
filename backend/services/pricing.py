@@ -9,6 +9,28 @@ from services.platform_fees import calculate_platform_fees
 
 PEAK_MONTHS = {12, 1, 3}
 
+VIEW_PREMIUMS: dict[str, float] = {
+    "beach_view": 600.0,
+    "sea_view": 500.0,
+    "hill_view": 350.0,
+    "pool_view": 250.0,
+    "garden_view": 150.0,
+    "city_view": 0.0,
+}
+
+VIEW_PREMIUM_LABELS: dict[str, str] = {
+    "beach_view": "Beach view premium",
+    "sea_view": "Sea view premium",
+    "hill_view": "Mountain view premium",
+    "pool_view": "Pool view premium",
+    "garden_view": "Garden view premium",
+}
+
+SUNRISE_FACING = {"east", "north_east", "south_east"}
+SUNSET_FACING = {"west", "north_west", "south_west"}
+SUNRISE_PREMIUM_PER_NIGHT = 250.0
+SUNSET_PREMIUM_PER_NIGHT = 250.0
+
 
 def _iter_nights(check_in: date, check_out: date) -> list[date]:
     nights = []
@@ -26,6 +48,8 @@ def calculate_dynamic_pricing(
     check_out: date,
     offer: Optional[dict[str, Any]] = None,
     referral_credits: float = 0.0,
+    view_type: Optional[str] = None,
+    facing_side: Optional[str] = None,
 ) -> dict[str, Any]:
     nights_list = _iter_nights(check_in, check_out)
     total_nights = len(nights_list)
@@ -39,6 +63,41 @@ def calculate_dynamic_pricing(
     )
 
     adjustments = 0.0
+
+    view_key = (view_type or "none").lower()
+    view_premium_rate = VIEW_PREMIUMS.get(view_key, 0.0)
+    if view_premium_rate > 0:
+        view_premium = view_premium_rate * total_nights
+        adjustments += view_premium
+        line_items.append(
+            {
+                "label": VIEW_PREMIUM_LABELS.get(view_key, "View premium"),
+                "amount": round(view_premium, 2),
+                "type": "surcharge",
+            }
+        )
+
+    facing = (facing_side or "none").lower()
+    if facing in SUNRISE_FACING:
+        sunrise_premium = SUNRISE_PREMIUM_PER_NIGHT * total_nights
+        adjustments += sunrise_premium
+        line_items.append(
+            {
+                "label": "Sunrise side premium",
+                "amount": round(sunrise_premium, 2),
+                "type": "surcharge",
+            }
+        )
+    elif facing in SUNSET_FACING:
+        sunset_premium = SUNSET_PREMIUM_PER_NIGHT * total_nights
+        adjustments += sunset_premium
+        line_items.append(
+            {
+                "label": "Sunset side premium",
+                "amount": round(sunset_premium, 2),
+                "type": "surcharge",
+            }
+        )
 
     weekend_nights = sum(1 for n in nights_list if n.weekday() in (4, 5))
     if weekend_nights:
@@ -117,13 +176,14 @@ def calculate_dynamic_pricing(
         )
         subtotal -= discount_amount
 
+    referral_credit_used = 0.0
     if referral_credits > 0:
-        credit_used = min(referral_credits, subtotal)
-        subtotal -= credit_used
+        referral_credit_used = min(referral_credits, subtotal)
+        subtotal -= referral_credit_used
         line_items.append(
             {
                 "label": "Referral credit",
-                "amount": round(-credit_used, 2),
+                "amount": round(-referral_credit_used, 2),
                 "type": "discount",
             }
         )
@@ -147,6 +207,7 @@ def calculate_dynamic_pricing(
         "price_breakdown": line_items,
         "subtotal": round(subtotal, 2),
         "discount_amount": round(discount_amount, 2),
+        "referral_credit_used": round(referral_credit_used, 2),
         "guest_platform_fee": fees["guest_platform_fee"],
         "host_platform_fee": fees["host_platform_fee"],
         "host_payout": fees["host_payout"],

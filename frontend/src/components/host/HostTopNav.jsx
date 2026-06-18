@@ -4,13 +4,7 @@ import Logo from '../Logo';
 import ThemeToggle from '../ThemeToggle';
 import { useAuth } from '../../context/AuthContext';
 import { Icon, ICON } from '../ui/Icon';
-
-const TABS = [
-  { to: '/host', label: 'Today', match: (p) => p === '/host' },
-  { to: '/host/calendar', label: 'Calendar', match: (p) => p.startsWith('/host/calendar') },
-  { to: '/host/rooms', label: 'Listings', match: (p) => p.startsWith('/host/rooms') || p.startsWith('/host/listings') },
-  { to: '/host/bookings', label: 'Messages', match: (p) => p.startsWith('/host/bookings') },
-];
+import { HOST_MAIN_NAV } from '../../constants/hostNav';
 
 export default function HostTopNav({ onMenuOpen }) {
   const { user } = useAuth();
@@ -23,7 +17,7 @@ export default function HostTopNav({ onMenuOpen }) {
         <Logo to="/host" />
 
         <nav className="host-topnav__tabs hide-mobile" aria-label="Host navigation">
-          {TABS.map(({ to, label, match }) => (
+          {HOST_MAIN_NAV.map(({ to, label, match }) => (
             <Link
               key={to}
               to={to}
@@ -35,7 +29,7 @@ export default function HostTopNav({ onMenuOpen }) {
         </nav>
 
         <div className="host-topnav__actions">
-          <Link to="/" className="host-topnav__switch hide-mobile">Switch to tourist</Link>
+          <Link to="/" className="host-topnav__switch hide-mobile">Switch to guest</Link>
           <ThemeToggle />
           <button type="button" className="host-topnav__avatar" aria-label="Open host menu" onClick={onMenuOpen}>
             {initial}

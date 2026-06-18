@@ -24,14 +24,14 @@ const hostingLinks = [
   { to: '/host', label: 'Host dashboard' },
   { to: '/host/rooms', label: 'Manage rooms' },
   { to: '/host/bookings', label: 'Manage bookings' },
-  { to: '/host/analytics', label: 'Analytics' },
-  { to: '/host/offers', label: 'Offers & discounts' },
-  { to: '/host/earnings', label: 'Earnings' },
+  { to: '/host/analytics', label: 'Earnings & analytics' },
+  { to: '/host/payouts', label: 'Payouts' },
   { to: '/terms#host', label: 'Hosting responsibly' },
 ];
 
 const companyLinks = [
   { to: '/privacy-policy', label: 'Privacy' },
+  { to: '/cookie-policy', label: 'Cookies' },
   { to: '/terms', label: 'Terms' },
   { to: '/terms#billing', label: 'Billing & GST' },
   { to: '/terms#invoices', label: 'Invoices & receipts' },
@@ -105,7 +105,11 @@ export default function Footer() {
           <span className="footer__legal-links">
             <Link to="/privacy-policy">Privacy</Link>
             <span aria-hidden="true">·</span>
+            <Link to="/cookie-policy">Cookies</Link>
+            <span aria-hidden="true">·</span>
             <Link to="/terms">Terms</Link>
+            <span aria-hidden="true">·</span>
+            <Link to="/help">Help</Link>
             <span aria-hidden="true">·</span>
             <Link to="/terms#billing">Billing</Link>
           </span>

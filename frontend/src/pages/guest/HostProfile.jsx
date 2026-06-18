@@ -1,29 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  Award,
   BadgeCheck,
-  Building2,
+  Briefcase,
+  ChevronRight,
+  IndianRupee,
   MailCheck,
+  MapPin,
   MessageCircle,
+  Receipt,
   ShieldCheck,
+  Sparkles,
   Star,
 } from 'lucide-react';
 import { hostsApi } from '../../api/api';
 import ErrorMessage from '../../components/ErrorMessage';
-import ReviewCard from '../../components/ReviewCard';
-import RoomCard from '../../components/RoomCard';
-import SafeImage from '../../components/SafeImage';
+import HostListingCard from '../../components/HostListingCard';
+import HostProfileReviewCard from '../../components/HostProfileReviewCard';
 import Spinner from '../../components/Spinner';
+import { getInterestIcon } from '../../constants/hostInterests';
 import { Icon, ICON } from '../../components/ui/Icon';
-import { getAvatarUrl } from '../../utils/roomImages';
+import { getAvatarUrl, getPrimaryRoomImage } from '../../utils/roomImages';
+import SafeImage from '../../components/SafeImage';
 
-function HostBadge({ icon: BadgeIcon, label }) {
-  return (
-    <span className="host-profile-badge">
-      <Icon icon={BadgeIcon} size={ICON.sm} />
-      {label}
-    </span>
-  );
+const ABOUT_PREVIEW_LENGTH = 280;
+
+function uniqueValues(items) {
+  return [...new Set(items.filter(Boolean))];
 }
 
 export default function HostProfile() {
@@ -31,6 +35,7 @@ export default function HostProfile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [aboutExpanded, setAboutExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,152 +54,254 @@ export default function HostProfile() {
     return () => { cancelled = true; };
   }, [id]);
 
+  const firstName = useMemo(
+    () => profile?.name?.split(' ')[0] || 'Host',
+    [profile?.name],
+  );
+
   if (loading) return <Spinner label="Loading host profile..." />;
   if (error) return <ErrorMessage message={error} />;
   if (!profile) return null;
 
   const avatar = profile.avatar_url || getAvatarUrl(profile.name, profile.id);
   const stats = profile.stats || {};
+  const details = profile.host_profile || {};
   const isTopHost = stats.avg_rating >= 4.8 && stats.total_reviews >= 10 && stats.listing_count >= 2;
-  const reviewsByListing = profile.reviews_by_listing || [];
-  const hasGroupedReviews = reviewsByListing.length > 0;
+  const reviews = profile.reviews || [];
+  const aboutText = profile.about_me || `${profile.name} hosts verified hotel stays on StayEase across India.`;
+  const aboutNeedsToggle = aboutText.length > ABOUT_PREVIEW_LENGTH;
+  const aboutPreview = aboutNeedsToggle && !aboutExpanded
+    ? `${aboutText.slice(0, ABOUT_PREVIEW_LENGTH).trim()}…`
+    : aboutText;
+  const interests = profile.interests || [];
+  const listings = profile.listings || [];
+  const cities = uniqueValues(listings.map((room) => room.location?.city));
+  const featuredListing = listings[0];
+  const moreListings = listings.slice(1);
 
   return (
     <div className="host-profile-page">
-      <section className="host-profile-hero card">
-        <div className="host-profile-hero__main">
-          <img src={avatar} alt={profile.name} className="host-profile-hero__avatar" />
-          <div className="host-profile-hero__intro">
-            <p className="host-profile-hero__eyebrow">StayEase host</p>
-            <h1>{profile.name}</h1>
-            {isTopHost && <p className="host-profile-hero__tag">Top-rated host on StayEase</p>}
-            <div className="host-profile-hero__badges">
-              {profile.identity_verified && <HostBadge icon={BadgeCheck} label="Identity verified" />}
-              {profile.email_verified && <HostBadge icon={MailCheck} label="Email confirmed" />}
-              <HostBadge icon={ShieldCheck} label="Secure payments" />
+      <header className="host-hero">
+        <div className="host-hero__inner">
+          <div className="host-hero__identity">
+            <div className="host-hero__avatar-shell">
+              <img src={avatar} alt={profile.name} className="host-hero__avatar" />
+              {profile.identity_verified && (
+                <span className="host-hero__verified" title="Identity verified">
+                  <Icon icon={BadgeCheck} size={ICON.sm} />
+                </span>
+              )}
             </div>
-          </div>
-        </div>
 
-        <div className="host-profile-stats">
-          <div>
-            <strong>{stats.total_reviews || 0}</strong>
-            <span>Reviews</span>
-          </div>
-          <div>
-            <strong>
-              <Icon icon={Star} size={ICON.sm} fill="currentColor" />
-              {stats.avg_rating ? stats.avg_rating.toFixed(2) : '—'}
-            </strong>
-            <span>Rating</span>
-          </div>
-          <div>
-            <strong>{stats.years_hosting || 1}</strong>
-            <span>Years hosting</span>
-          </div>
-          <div>
-            <strong>{stats.listing_count || 0}</strong>
-            <span>Listings</span>
-          </div>
-          <div>
-            <strong>{stats.response_rate || 100}%</strong>
-            <span>Response rate</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="host-profile-listings">
-        <div className="host-profile-listings__header">
-          <h2>{profile.name.split(' ')[0]}&apos;s listings</h2>
-          <p>{profile.listings?.length || 0} stays · ratings synced from guest reviews</p>
-        </div>
-        {profile.listings?.length ? (
-          <div className="grid-rooms">
-            {profile.listings.map((room) => (
-              <RoomCard key={room._id} room={room} />
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state card">This host has no active listings right now.</div>
-        )}
-      </section>
-
-      <div className="host-profile-grid">
-        <section className="host-profile-panel card">
-          <h2>About {profile.name.split(' ')[0]}</h2>
-          {profile.about_me ? (
-            <p className="host-profile-about">{profile.about_me}</p>
-          ) : (
-            <p className="listing-muted">
-              {profile.name} hosts verified stays on StayEase across India.
-            </p>
-          )}
-
-          <div className="host-profile-facts">
-            <div>
-              <Icon icon={Building2} size={ICON.md} />
-              <div>
-                <strong>{stats.listing_count || 0} listings</strong>
-                <p>Browse every stay hosted by {profile.name.split(' ')[0]}.</p>
+            <div className="host-hero__copy">
+              <p className="host-hero__eyebrow">StayEase verified host</p>
+              <h1>{profile.name}</h1>
+              {details.work && <p className="host-hero__role">{details.work}</p>}
+              <div className="host-hero__chips">
+                {isTopHost && (
+                  <span className="host-chip host-chip--gold">
+                    <Icon icon={Award} size={ICON.sm} />
+                    Top-rated host
+                  </span>
+                )}
+                {cities.map((city) => (
+                  <span key={city} className="host-chip">
+                    <Icon icon={MapPin} size={ICON.sm} />
+                    {city}
+                  </span>
+                ))}
               </div>
             </div>
-            <div>
+          </div>
+
+          <div className="host-hero__stats">
+            <div className="host-stat-tile host-stat-tile--reviews">
+              <strong>{stats.total_reviews || 0}</strong>
+              <span>Guest reviews</span>
+            </div>
+            <div className="host-stat-tile host-stat-tile--rating">
+              <strong>
+                {stats.avg_rating ? stats.avg_rating.toFixed(2) : '—'}
+                <Icon icon={Star} size={ICON.sm} fill="currentColor" />
+              </strong>
+              <span>Avg. rating</span>
+            </div>
+            <div className="host-stat-tile host-stat-tile--years">
+              <strong>{stats.years_hosting || 1}</strong>
+              <span>Years hosting</span>
+            </div>
+            <div className="host-stat-tile host-stat-tile--listings">
+              <strong>{stats.listing_count || 0}</strong>
+              <span>Live listings</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="host-profile-body">
+        <section className="host-bento">
+          <article className="host-story">
+            <div className="host-story__header">
+              <span className="host-section-tag">01 · Story</span>
+              <h2>Meet {firstName}</h2>
+            </div>
+
+            {details.unique_highlight && (
+              <blockquote className="host-story__quote">
+                <Icon icon={Sparkles} size={ICON.md} />
+                <p>&ldquo;{details.unique_highlight}&rdquo;</p>
+              </blockquote>
+            )}
+
+            <p className="host-story__bio">{aboutPreview}</p>
+            {aboutNeedsToggle && (
+              <button
+                type="button"
+                className="host-story__toggle"
+                onClick={() => setAboutExpanded((v) => !v)}
+              >
+                {aboutExpanded ? 'Show less' : 'Read full story'}
+              </button>
+            )}
+          </article>
+
+          <div className="host-trust-bento">
+            <div className="host-trust-tile host-trust-tile--primary">
+              <Icon icon={ShieldCheck} size={ICON.lg} />
+              <strong>Verified on StayEase</strong>
+              <p>Identity checked before listing goes live.</p>
+            </div>
+            <div className="host-trust-tile">
+              <Icon icon={Receipt} size={ICON.md} />
+              <strong>GST-ready stays</strong>
+              <p>Transparent tax breakdown at checkout.</p>
+            </div>
+            <div className="host-trust-tile">
+              <Icon icon={IndianRupee} size={ICON.md} />
+              <strong>Secure payments</strong>
+              <p>Book and pay only through StayEase.</p>
+            </div>
+            <div className="host-trust-tile">
               <Icon icon={MessageCircle} size={ICON.md} />
-              <div>
-                <strong>Quick responses</strong>
-                <p>Hosts on StayEase typically reply within an hour.</p>
-              </div>
+              <strong>{stats.response_rate || 100}% response</strong>
+              <p>Typically replies within an hour.</p>
             </div>
+            {profile.email_verified && (
+              <div className="host-trust-tile host-trust-tile--compact">
+                <Icon icon={MailCheck} size={ICON.md} />
+                <span>Email confirmed</span>
+              </div>
+            )}
+            {details.work && (
+              <div className="host-trust-tile host-trust-tile--compact">
+                <Icon icon={Briefcase} size={ICON.md} />
+                <span>{details.work}</span>
+              </div>
+            )}
           </div>
-
-          <p className="host-profile-security">
-            <Icon icon={ShieldCheck} size={ICON.sm} />
-            To protect your payment, always book and communicate through StayEase.
-          </p>
         </section>
 
-        <section className="host-profile-panel card">
-          <h2>Guest reviews by property</h2>
-          {!hasGroupedReviews ? (
-            <p className="listing-muted">No guest reviews yet for this host&apos;s listings.</p>
-          ) : (
-            <div className="host-profile-reviews-by-listing">
-              {reviewsByListing.map((listing) => (
-                <article key={listing.room_id} className="host-profile-listing-reviews">
-                  <Link to={`/rooms/${listing.room_id}`} className="host-profile-listing-reviews__header">
-                    {listing.photo_url ? (
-                      <SafeImage
-                        src={listing.photo_url}
-                        alt={listing.room_title}
-                        className="host-profile-listing-reviews__photo"
-                      />
-                    ) : (
-                      <div className="host-profile-listing-reviews__photo host-profile-listing-reviews__photo--placeholder" />
-                    )}
-                    <div>
-                      <h3>{listing.room_title}</h3>
-                      <p>
-                        <Icon icon={Star} size={ICON.sm} fill="currentColor" />
-                        {listing.avg_rating.toFixed(2)}
-                        <span> · {listing.total_reviews} review{listing.total_reviews !== 1 ? 's' : ''}</span>
-                      </p>
-                    </div>
-                  </Link>
-                  <div className="host-profile-reviews">
-                    {listing.reviews.map((review) => (
-                      <ReviewCard key={review._id} review={review} compact />
-                    ))}
-                  </div>
-                  {listing.total_reviews > listing.reviews.length && (
-                    <Link to={`/rooms/${listing.room_id}#reviews`} className="host-profile-listing-reviews__more">
-                      View all {listing.total_reviews} reviews for this stay
-                    </Link>
-                  )}
-                </article>
+        {reviews.length > 0 && (
+          <section className="host-panel host-panel--reviews">
+            <div className="host-panel__head">
+              <div>
+                <span className="host-section-tag">02 · Voices</span>
+                <h2>What guests are saying</h2>
+              </div>
+              <p className="host-panel__count">{reviews.length} verified review{reviews.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="host-reviews-mosaic">
+              {reviews.slice(0, 6).map((review, index) => (
+                <div
+                  key={review._id}
+                  className={`host-reviews-mosaic__item host-reviews-mosaic__item--${(index % 3) + 1}`}
+                >
+                  <HostProfileReviewCard review={review} />
+                </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
+
+        {interests.length > 0 && (
+          <section className="host-panel host-panel--expertise">
+            <span className="host-section-tag">03 · Expertise</span>
+            <h2>Message {firstName} about</h2>
+            <p className="host-panel__lead">Great topics to ask before you reserve.</p>
+            <ul className="host-expertise-cloud">
+              {interests.map((interest, index) => {
+                const InterestIcon = getInterestIcon(interest);
+                return (
+                  <li
+                    key={interest}
+                    className="host-expertise-pill"
+                    style={{ '--pill-delay': `${index * 40}ms` }}
+                  >
+                    <Icon icon={InterestIcon} size={ICON.sm} />
+                    {interest}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {listings.length > 0 && (
+          <section className="host-panel host-panel--listings" id="host-listings">
+            <div className="host-panel__head">
+              <div>
+                <span className="host-section-tag">04 · Stays</span>
+                <h2>Properties by {firstName}</h2>
+              </div>
+              <p className="host-panel__count">{listings.length} on StayEase</p>
+            </div>
+
+            {featuredListing && (
+              <Link to={`/rooms/${featuredListing._id}`} className="host-featured-stay">
+                <SafeImage
+                  src={getPrimaryRoomImage(featuredListing)}
+                  alt={featuredListing.title}
+                  className="host-featured-stay__image"
+                  fallbackSeed={featuredListing._id}
+                />
+                <div className="host-featured-stay__overlay">
+                  <span className="host-featured-stay__label">Featured stay</span>
+                  <h3>{featuredListing.title}</h3>
+                  <p>
+                    {featuredListing.location?.area}, {featuredListing.location?.city}
+                    {featuredListing.avg_rating > 0 && (
+                      <>
+                        {' · '}
+                        <Icon icon={Star} size={ICON.sm} fill="currentColor" />
+                        {featuredListing.avg_rating.toFixed(2)}
+                      </>
+                    )}
+                  </p>
+                  <span className="host-featured-stay__cta">
+                    View listing <Icon icon={ChevronRight} size={ICON.sm} />
+                  </span>
+                </div>
+              </Link>
+            )}
+
+            {moreListings.length > 0 && (
+              <div className="host-listings-grid">
+                {moreListings.map((room) => (
+                  <HostListingCard key={room._id} room={room} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <aside className="host-cta-strip">
+          <div className="host-cta-strip__glow" aria-hidden />
+          <Icon icon={ShieldCheck} size={ICON.lg} />
+          <div>
+            <strong>Your trip, protected on StayEase</strong>
+            <p>Pay, message, and cancel through StayEase — GST invoice and support in one place.</p>
+          </div>
+        </aside>
       </div>
     </div>
   );

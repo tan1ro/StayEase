@@ -105,7 +105,10 @@ async def test_booking_gst_calculation_correct(client, guest_token, seed_data):
 
 
 async def test_booking_total_price_correct(client, guest_token, seed_data):
+    # Use a weekday far enough ahead to get early-bird discount without weekend/peak surcharges
     check_in = date.today() + timedelta(days=50)
+    while check_in.weekday() in (4, 5) or check_in.month in (12, 1, 3):
+        check_in += timedelta(days=1)
     check_out = check_in + timedelta(days=1)
     res = await client.post(
         "/api/bookings",

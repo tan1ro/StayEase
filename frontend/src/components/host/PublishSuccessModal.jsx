@@ -5,7 +5,7 @@ import { Icon, ICON } from '../ui/Icon';
 
 export default function PublishSuccessModal({ open, onClose, roomId, title }) {
   return (
-    <Modal open={open} onClose={onClose} size="sm">
+    <Modal open={open} onClose={onClose} size="sm" hideHeader>
       <div className="host-publish-modal host-publish-modal--success">
         <div className="host-publish-modal__icon host-publish-modal__icon--success" aria-hidden="true">
           <Icon icon={CheckCircle2} size={40} />
@@ -16,12 +16,21 @@ export default function PublishSuccessModal({ open, onClose, roomId, title }) {
         </p>
         <div className="host-publish-modal__actions">
           {roomId && (
+            <Link
+              to={`/host/listings/setup?roomId=${roomId}`}
+              className="btn btn-primary"
+              onClick={onClose}
+            >
+              Complete setup
+            </Link>
+          )}
+          {roomId && (
             <Link to={`/rooms/${roomId}`} className="btn btn-outline" onClick={onClose}>
               <Icon icon={ExternalLink} size={ICON.sm} />
               View listing
             </Link>
           )}
-          <Link to="/host/rooms" className="btn btn-primary" onClick={onClose}>
+          <Link to="/host/rooms" className="btn btn-outline" onClick={onClose}>
             Go to listings
           </Link>
         </div>

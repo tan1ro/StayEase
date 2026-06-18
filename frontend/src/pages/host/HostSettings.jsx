@@ -54,7 +54,7 @@ export default function HostSettings() {
           <div>
             <strong>GST invoicing</strong>
             <p>StayEase auto-generates CGST/SGST invoices on every paid booking — unique to Indian hotel billing.</p>
-            <Link to="/host/earnings" className="btn btn-outline btn-sm">View earnings</Link>
+            <Link to="/host/analytics" className="btn btn-outline btn-sm">View earnings</Link>
           </div>
         </section>
       </main>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
+from pymongo.errors import DuplicateKeyError
 
 from database import database
 from models.common import serialize_doc, utc_now
@@ -25,7 +26,10 @@ async def join_waitlist(payload: WaitlistCreate, user: dict = Depends(require_ro
         "status": "waiting",
         "created_at": utc_now(),
     }
-    res = await database.collection("waitlist").insert_one(doc)
+    try:
+        res = await database.collection("waitlist").insert_one(doc)
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=409, detail="You are already on the waitlist for these dates") from exc
     created = await database.collection("waitlist").find_one({"_id": res.inserted_id})
     return serialize_doc(created)
 

@@ -5,9 +5,10 @@ from typing import Literal, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
-from database import database
+from database import get_database
 from models.auth import RoomRecommendRequest
 from models.room import RoomCreate, RoomInDB, RoomUpdate
 from models.common import serialize_doc, utc_now
@@ -16,6 +17,18 @@ from services.cloudinary import delete_asset, upload_image, upload_video
 from services.geo import filter_by_distance
 from services.recommender import rank_rooms
 from services.waitlist import find_conflicting_booking
+from services.availability import blocked_dates_conflict
+from services.transactions import (
+    commit_add_photo,
+    commit_add_video,
+    commit_delete_photo,
+    commit_delete_video,
+    commit_listing_report,
+    commit_reorder_photos,
+    commit_room_delete,
+    commit_room_inquiry,
+    commit_set_primary_photo,
+)
 
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
@@ -31,10 +44,15 @@ def _split_csv(v: Optional[str]) -> Optional[list[str]]:
     return parts or None
 
 
-async def _get_room_or_404(id: str, user: dict | None = None, require_owner: bool = False) -> dict:
+async def _get_room_or_404(
+    db: AsyncIOMotorDatabase,
+    id: str,
+    user: dict | None = None,
+    require_owner: bool = False,
+) -> dict:
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Room not found")
-    room = await database.collection("rooms").find_one({"_id": ObjectId(id)})
+    room = await db["rooms"].find_one({"_id": ObjectId(id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if require_owner and user:
@@ -44,32 +62,38 @@ async def _get_room_or_404(id: str, user: dict | None = None, require_owner: boo
 
 
 @router.post("", status_code=201)
-async def create_room(payload: RoomCreate, user: dict = Depends(require_role("host", "admin"))):
-    rooms = database.collection("rooms")
+async def create_room(
+    payload: RoomCreate,
+    user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     doc = RoomInDB(host_id=str(user["_id"]), **payload.model_dump()).model_dump(
         by_alias=True,
         exclude_none=True,
     )
     doc.pop("_id", None)
-    res = await rooms.insert_one(doc)
-    created = await rooms.find_one({"_id": res.inserted_id})
+    res = await db["rooms"].insert_one(doc)
+    created = await db["rooms"].find_one({"_id": res.inserted_id})
     return serialize_doc(created)
 
 
 @router.post("/recommend")
-async def recommend_rooms(payload: RoomRecommendRequest):
+async def recommend_rooms(
+    payload: RoomRecommendRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     q: dict = {"is_available": True}
     if payload.city:
         q["location.city"] = {"$regex": f"^{payload.city}$", "$options": "i"}
-    rooms = await database.collection("rooms").find(q).to_list(200)
+    rooms = await db["rooms"].find(q).to_list(200)
     preferences = payload.model_dump(exclude_none=True)
     ranked = rank_rooms(rooms, preferences)
     return [serialize_doc(r) for r in ranked[:20]]
 
 
 @router.get("/host/{host_id}")
-async def get_rooms_by_host(host_id: str):
-    items = await database.collection("rooms").find({"host_id": host_id}).sort("created_at", -1).to_list(200)
+async def get_rooms_by_host(host_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    items = await db["rooms"].find({"host_id": host_id}).sort("created_at", -1).to_list(200)
     return [serialize_doc(i) for i in items if i.get("_id") is not None]
 
 
@@ -94,9 +118,8 @@ async def list_rooms(
     check_in: Optional[date] = None,
     check_out: Optional[date] = None,
     host_id: Optional[str] = None,
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    rooms = database.collection("rooms")
-
     q: dict = {}
 
     type_vals = _split_csv(type)
@@ -149,7 +172,7 @@ async def list_rooms(
     if check_in and check_out and check_out <= check_in:
         raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
 
-    cursor = rooms.find(q)
+    cursor = db["rooms"].find(q)
 
     sort_map = {
         "price_asc": ("price_per_night", 1),
@@ -170,7 +193,8 @@ async def list_rooms(
         filtered = []
         for room in items:
             conflict = await find_conflicting_booking(str(room["_id"]), check_in, check_out)
-            if not conflict:
+            blocked = blocked_dates_conflict(room.get("blocked_dates"), check_in, check_out)
+            if not conflict and not blocked:
                 filtered.append(room)
         items = filtered
 
@@ -178,12 +202,12 @@ async def list_rooms(
 
 
 @router.get("/{id}")
-async def get_room(id: str):
-    room = await _get_room_or_404(id)
+async def get_room(id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    room = await _get_room_or_404(db, id)
     room_doc = serialize_doc(room)
     host_id = room.get("host_id")
     if host_id and ObjectId.is_valid(host_id):
-        host = await database.collection("users").find_one({"_id": ObjectId(host_id)})
+        host = await db["users"].find_one({"_id": ObjectId(host_id)})
         if host:
             room_doc["host"] = {
                 "id": str(host["_id"]),
@@ -195,10 +219,69 @@ async def get_room(id: str):
     return room_doc
 
 
+@router.get("/{id}/booked-dates")
+async def get_room_booked_dates(id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    await _get_room_or_404(db, id)
+    bookings = await db["bookings"].find(
+        {
+            "room_id": id,
+            "status": "confirmed",
+        }
+    ).to_list(500)
+    ranges = [
+        {"check_in": b["check_in_date"], "check_out": b["check_out_date"]}
+        for b in bookings
+        if b.get("check_in_date") and b.get("check_out_date")
+    ]
+    return {"ranges": ranges}
+
+
+@router.get("/{id}/alternatives")
+async def get_room_alternatives(
+    id: str,
+    check_in: Optional[date] = None,
+    check_out: Optional[date] = None,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    room = await _get_room_or_404(db, id)
+    host_id = room.get("host_id")
+    city = room.get("location", {}).get("city")
+    area = room.get("location", {}).get("area")
+    if not host_id or not city:
+        return []
+
+    if check_in and check_out and check_out <= check_in:
+        raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
+
+    q: dict = {
+        "host_id": host_id,
+        "location.city": city,
+        "is_available": True,
+    }
+    if area:
+        q["location.area"] = area
+    siblings = await db["rooms"].find(q).sort("room_number", 1).to_list(50)
+
+    result = []
+    for sibling in siblings:
+        available = True
+        if check_in and check_out:
+            if blocked_dates_conflict(sibling.get("blocked_dates"), check_in, check_out):
+                available = False
+            else:
+                conflict = await find_conflicting_booking(str(sibling["_id"]), check_in, check_out)
+                if conflict:
+                    available = False
+        doc = serialize_doc(sibling)
+        doc["available_for_dates"] = available
+        result.append(doc)
+    return result
+
+
 @router.get("/{id}/rating")
-async def get_room_rating(id: str):
-    room = await _get_room_or_404(id)
-    reviews = await database.collection("reviews").find({"room_id": id}).to_list(500)
+async def get_room_rating(id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+    room = await _get_room_or_404(db, id)
+    reviews = await db["reviews"].find({"room_id": id}).to_list(500)
     breakdown = {str(i): 0 for i in range(1, 6)}
     for r in reviews:
         star = str(int(r.get("rating", 0)))
@@ -228,40 +311,23 @@ async def send_room_inquiry(
     id: str,
     payload: RoomInquiryCreate,
     user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id)
+    room = await _get_room_or_404(db, id)
     if payload.check_in and payload.check_out and payload.check_out <= payload.check_in:
         raise HTTPException(status_code=422, detail="Check-out must be after check-in")
 
     host_id = room.get("host_id")
-    doc = {
-        "room_id": id,
-        "host_id": host_id,
-        "guest_id": str(user["_id"]),
-        "guest_name": user["name"],
-        "guest_email": user["email"],
-        "message": payload.message.strip(),
-        "check_in": payload.check_in.isoformat() if payload.check_in else None,
-        "check_out": payload.check_out.isoformat() if payload.check_out else None,
-        "created_at": utc_now(),
-    }
-    res = await database.collection("inquiries").insert_one(doc)
-
-    if host_id:
-        await database.collection("notifications").insert_one(
-            {
-                "user_id": host_id,
-                "type": "inquiry",
-                "title": f"New message from {user['name']}",
-                "body": payload.message.strip()[:200],
-                "channel": "in_app",
-                "sent_at": utc_now(),
-                "read": False,
-                "meta": {"room_id": id, "inquiry_id": str(res.inserted_id)},
-            }
-        )
-
-    created = await database.collection("inquiries").find_one({"_id": res.inserted_id})
+    created = await commit_room_inquiry(
+        room_id=id,
+        host_id=host_id,
+        guest_id=str(user["_id"]),
+        guest_name=user["name"],
+        guest_email=user["email"],
+        message=payload.message.strip(),
+        check_in=payload.check_in.isoformat() if payload.check_in else None,
+        check_out=payload.check_out.isoformat() if payload.check_out else None,
+    )
     return serialize_doc(created)
 
 
@@ -270,14 +336,10 @@ async def report_room(
     id: str,
     payload: RoomReportCreate,
     user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id)
+    room = await _get_room_or_404(db, id)
     guest_id = str(user["_id"])
-    existing = await database.collection("listing_reports").find_one(
-        {"room_id": id, "reporter_id": guest_id, "status": "open"}
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail="You already reported this listing")
 
     doc = {
         "room_id": id,
@@ -290,8 +352,7 @@ async def report_room(
         "status": "open",
         "created_at": utc_now(),
     }
-    res = await database.collection("listing_reports").insert_one(doc)
-    created = await database.collection("listing_reports").find_one({"_id": res.inserted_id})
+    created = await commit_listing_report(doc)
     return serialize_doc(created)
 
 
@@ -300,15 +361,16 @@ async def update_room(
     id: str,
     payload: RoomUpdate,
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
+    room = await _get_room_or_404(db, id, user, require_owner=True)
 
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not updates:
         return serialize_doc(room)
 
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": updates})
-    updated = await database.collection("rooms").find_one({"_id": ObjectId(id)})
+    await db["rooms"].update_one({"_id": ObjectId(id)}, {"$set": updates})
+    updated = await db["rooms"].find_one({"_id": ObjectId(id)})
     return serialize_doc(updated)
 
 
@@ -316,17 +378,10 @@ async def update_room(
 async def delete_room(
     id: str,
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    bookings = database.collection("bookings")
-    room = await _get_room_or_404(id, user, require_owner=True)
-
-    active = await bookings.find_one(
-        {"room_id": id, "status": {"$in": ["confirmed"]}, "payment_status": {"$in": ["pending", "paid"]}}
-    )
-    if active:
-        raise HTTPException(status_code=409, detail="Cannot delete room with active booking")
-
-    await database.collection("rooms").delete_one({"_id": ObjectId(id)})
+    await _get_room_or_404(db, id, user, require_owner=True)
+    await commit_room_delete(id)
     return None
 
 
@@ -335,54 +390,59 @@ async def add_photo(
     id: str,
     file: UploadFile = File(...),
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
-    photos = room.get("photos", [])
-    if len(photos) >= MAX_PHOTOS:
-        raise HTTPException(status_code=422, detail={"photos": f"Maximum {MAX_PHOTOS} photos allowed"})
+    room = await _get_room_or_404(db, id, user, require_owner=True)
 
     uploaded = await upload_image(file)
-    photo = {"url": uploaded["url"], "public_id": uploaded["public_id"], "is_primary": len(photos) == 0}
-    photos.append(photo)
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": {"photos": photos}})
-    return photo
+    photo = {"url": uploaded["url"], "public_id": uploaded["public_id"], "is_primary": len(room.get("photos", [])) == 0}
+    return await commit_add_photo(id, photo, max_photos=MAX_PHOTOS)
 
 
-@router.delete("/{id}/photos/{pid}")
+@router.delete("/{id}/photos/{pid:path}")
 async def delete_photo(
     id: str,
     pid: str,
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
+    room = await _get_room_or_404(db, id, user, require_owner=True)
     photos = room.get("photos", [])
     target = next((p for p in photos if p.get("public_id") == pid), None)
     if not target:
         raise HTTPException(status_code=404, detail="Photo not found")
 
     delete_asset(pid)
-    photos = [p for p in photos if p.get("public_id") != pid]
-    if photos and not any(p.get("is_primary") for p in photos):
-        photos[0]["is_primary"] = True
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": {"photos": photos}})
+    await commit_delete_photo(id, pid)
     return {"message": "Photo deleted"}
 
 
-@router.patch("/{id}/photos/{pid}/primary")
+@router.patch("/{id}/photos/{pid:path}/primary")
 async def set_primary_photo(
     id: str,
     pid: str,
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
-    photos = room.get("photos", [])
-    if not any(p.get("public_id") == pid for p in photos):
-        raise HTTPException(status_code=404, detail="Photo not found")
-
-    for p in photos:
-        p["is_primary"] = p.get("public_id") == pid
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": {"photos": photos}})
+    await _get_room_or_404(db, id, user, require_owner=True)
+    photos = await commit_set_primary_photo(id, pid)
     return {"message": "Primary photo updated", "photos": photos}
+
+
+class PhotoReorderPayload(BaseModel):
+    public_ids: list[str] = Field(default_factory=list)
+
+
+@router.patch("/{id}/photos/reorder")
+async def reorder_photos(
+    id: str,
+    payload: PhotoReorderPayload,
+    user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    await _get_room_or_404(db, id, user, require_owner=True)
+    ordered = await commit_reorder_photos(id, payload.public_ids)
+    return {"message": "Photo order updated", "photos": ordered}
 
 
 @router.post("/{id}/videos")
@@ -390,31 +450,27 @@ async def add_video(
     id: str,
     file: UploadFile = File(...),
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
-    videos = room.get("videos", [])
-    if len(videos) >= MAX_VIDEOS:
-        raise HTTPException(status_code=422, detail={"videos": f"Maximum {MAX_VIDEOS} videos allowed"})
+    room = await _get_room_or_404(db, id, user, require_owner=True)
 
     uploaded = await upload_video(file)
     video = {"url": uploaded["url"], "public_id": uploaded["public_id"]}
-    videos.append(video)
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": {"videos": videos}})
-    return video
+    return await commit_add_video(id, video, max_videos=MAX_VIDEOS)
 
 
-@router.delete("/{id}/videos/{vid}")
+@router.delete("/{id}/videos/{vid:path}")
 async def delete_video(
     id: str,
     vid: str,
     user: dict = Depends(require_role("host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    room = await _get_room_or_404(id, user, require_owner=True)
+    room = await _get_room_or_404(db, id, user, require_owner=True)
     videos = room.get("videos", [])
     if not any(v.get("public_id") == vid for v in videos):
         raise HTTPException(status_code=404, detail="Video not found")
 
     delete_asset(vid, resource_type="video")
-    videos = [v for v in videos if v.get("public_id") != vid]
-    await database.collection("rooms").update_one({"_id": ObjectId(id)}, {"$set": {"videos": videos}})
+    await commit_delete_video(id, vid)
     return {"message": "Video deleted"}

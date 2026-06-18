@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "emails"
 
@@ -44,5 +47,9 @@ async def send_template_email(
         attachments=attachments or [],
     )
     fm = FastMail(_mail_config())
-    await fm.send_message(message, template_name=template_name)
-    return True
+    try:
+        await fm.send_message(message, template_name=template_name)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to send email to %s (%s): %s", to, subject, exc)
+        return False

@@ -9,6 +9,7 @@ vi.mock('../../api/api', async () => {
   return {
     ...actual,
     roomsApi: { list: vi.fn() },
+    fetchOffers: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -99,7 +100,7 @@ describe('Home', () => {
     render(<MemoryRouter initialEntries={['/?city=Bangalore']}><Home /></MemoryRouter>);
     await waitFor(() => {
       expect(roomsApi.list).toHaveBeenCalled();
-      expect(screen.getByText(/stay.*in Bangalore/i)).toBeInTheDocument();
+      expect(screen.getByText(/1 room found/i)).toBeInTheDocument();
     });
   });
 });

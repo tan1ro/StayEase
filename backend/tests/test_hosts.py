@@ -13,6 +13,8 @@ async def test_host_profile_returns_public_data(client, seed_data):
     assert body["stats"]["listing_count"] >= 1
     assert isinstance(body["listings"], list)
     assert isinstance(body["reviews"], list)
+    assert isinstance(body["interests"], list)
+    assert "places" not in body
     assert "email" not in body
     assert "phone" not in body
 

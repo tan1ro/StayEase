@@ -6,8 +6,10 @@ from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 
-from database import database
+from database import database, get_database
 from models.auth import LoginRequest, VerifyEmailRequest
 from models.user import IdentityProof, NotificationPrefs, UserCreate, UserPublic
 from services.auth import (
@@ -20,7 +22,7 @@ from services.auth import (
 from models.common import serialize_doc, utc_now
 from services.cloudinary import upload_image
 from services.email import send_template_email
-from services.roles import normalize_role, resolve_registration_role
+from services.roles import resolve_registration_role
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -40,8 +42,11 @@ async def _send_otp_email(user: dict, otp: str) -> None:
 
 
 @router.post("/register", status_code=201)
-async def register(payload: UserCreate):
-    users = database.collection("users")
+async def register(
+    payload: UserCreate,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    users = db["users"]
 
     existing = await users.find_one({"email": payload.email.strip().lower()})
     if existing:
@@ -84,16 +89,45 @@ async def register(payload: UserCreate):
         "created_at": utc_now(),
     }
 
-    res = await users.insert_one(doc)
+    async def _register_txn(session):
+        try:
+            res = await users.insert_one(doc, session=session)
+        except DuplicateKeyError as exc:
+            key = getattr(exc, "details", {}).get("keyPattern", {})
+            if "email" in key:
+                raise HTTPException(status_code=422, detail={"email": "Email already registered"}) from exc
+            raise
+        if referred_by_user:
+            await users.update_one(
+                {"_id": referred_by_user["_id"]},
+                {"$inc": {"referral_credits": 200.0}},
+                session=session,
+            )
+            await users.update_one(
+                {"_id": res.inserted_id},
+                {"$inc": {"referral_credits": 100.0}},
+                session=session,
+            )
+        return res.inserted_id
 
-    if referred_by_user:
-        await users.update_one(
-            {"_id": referred_by_user["_id"]},
-            {"$inc": {"referral_credits": 200.0}},
-        )
-        await users.update_one({"_id": res.inserted_id}, {"$inc": {"referral_credits": 100.0}})
+    inserted_id = None
+    for attempt in range(5):
+        if attempt > 0:
+            doc["referral_code"] = await generate_unique_referral_code()
+        try:
+            inserted_id = await database.run_transaction(_register_txn)
+            break
+        except HTTPException:
+            raise
+        except DuplicateKeyError:
+            if attempt == 4:
+                raise HTTPException(status_code=500, detail="Registration failed, please retry") from None
+            continue
 
-    user = await users.find_one({"_id": res.inserted_id})
+    if inserted_id is None:
+        raise HTTPException(status_code=500, detail="Registration failed, please retry")
+
+    user = await users.find_one({"_id": inserted_id})
     token = create_access_token(subject=str(user["_id"]), role=user["role"])
 
     await send_template_email(
@@ -107,8 +141,11 @@ async def register(payload: UserCreate):
 
 
 @router.post("/login")
-async def login(payload: LoginRequest):
-    users = database.collection("users")
+async def login(
+    payload: LoginRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    users = db["users"]
     email = payload.email.strip().lower()
     user = await users.find_one({"email": email})
     if not user or not verify_password(payload.password, user.get("password_hash", "")):
@@ -131,6 +168,7 @@ async def update_profile(
     notification_prefs: Optional[str] = Form(None),
     avatar: Optional[UploadFile] = File(None),
     user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     updates: dict = {}
 
@@ -159,8 +197,8 @@ async def update_profile(
     if not updates:
         return UserPublic.from_mongo(user)
 
-    await database.collection("users").update_one({"_id": user["_id"]}, {"$set": updates})
-    updated = await database.collection("users").find_one({"_id": user["_id"]})
+    await db["users"].update_one({"_id": user["_id"]}, {"$set": updates})
+    updated = await db["users"].find_one({"_id": user["_id"]})
     return UserPublic.from_mongo(updated)
 
 
@@ -170,6 +208,7 @@ async def verify_identity(
     id_number: str = Form(...),
     document: UploadFile = File(...),
     user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     if id_type not in ("aadhar", "pan", "passport"):
         raise HTTPException(status_code=422, detail={"id_type": "Invalid identity type"})
@@ -181,7 +220,7 @@ async def verify_identity(
         raise HTTPException(status_code=422, detail={"id_number": str(e)}) from e
 
     proof = identity.model_dump()
-    await database.collection("users").update_one(
+    await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {"identity_proof": proof}},
     )
@@ -189,7 +228,11 @@ async def verify_identity(
 
 
 @router.post("/verify-email")
-async def verify_email(payload: VerifyEmailRequest, user: dict = Depends(get_current_user)):
+async def verify_email(
+    payload: VerifyEmailRequest,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     if user.get("email_verified"):
         return {"message": "Email already verified"}
 
@@ -202,7 +245,7 @@ async def verify_email(payload: VerifyEmailRequest, user: dict = Depends(get_cur
     if payload.otp != stored_otp:
         raise HTTPException(status_code=422, detail={"otp": "Invalid OTP"})
 
-    await database.collection("users").update_one(
+    await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {"email_verified": True, "email_otp": None, "email_otp_expires": None}},
     )
@@ -210,13 +253,16 @@ async def verify_email(payload: VerifyEmailRequest, user: dict = Depends(get_cur
 
 
 @router.post("/resend-otp")
-async def resend_otp(user: dict = Depends(get_current_user)):
+async def resend_otp(
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     if user.get("email_verified"):
         return {"message": "Email already verified"}
 
     otp = _generate_otp()
     expires = utc_now() + timedelta(minutes=10)
-    await database.collection("users").update_one(
+    await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {"email_otp": otp, "email_otp_expires": expires}},
     )

@@ -1,28 +1,36 @@
 import { useEffect, useState } from 'react';
-import { Download, ShieldCheck } from 'lucide-react';
+import { X } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import StatusBadge from '../../components/StatusBadge';
-import CheckInVerificationCard from '../../components/CheckInVerificationCard';
-import Modal from '../../components/Modal';
-import { hostPayout, hostPlatformFee } from '../../components/HostPayoutBreakdown';
+import ConfirmModal from '../../components/ConfirmModal';
 import { bookingsApi, formatCurrency } from '../../api/api';
+import { useAuth } from '../../context/AuthContext';
 
 const FILTERS = ['', 'confirmed', 'completed', 'cancelled'];
+const TAB_LABELS = ['All', 'Confirmed', 'Completed', 'Cancelled'];
 
 export default function ManageBookings() {
+  const { user } = useAuth();
+  const hostId = user?.id || user?._id;
   const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [checkInBooking, setCheckInBooking] = useState(null);
+  const [cancelId, setCancelId] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = async () => {
+    if (!hostId) return;
     setLoading(true);
+    setError('');
     try {
-      const params = { scope: 'hosting', ...(filter ? { status_filter: filter } : {}) };
+      const params = {
+        host_id: hostId,
+        ...(filter ? { status_filter: filter } : {}),
+      };
       const { data } = await bookingsApi.list(params);
-      setBookings(data);
+      setBookings(data || []);
     } catch (err) {
       setError(err.normalized?.message || 'Failed to load bookings');
     } finally {
@@ -30,33 +38,31 @@ export default function ManageBookings() {
     }
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, hostId]);
 
-  const exportCsv = () => {
-    const headers = ['Tourist', 'Check-in', 'Check-out', 'Subtotal', 'Host fee', 'Your earnings', 'Guest paid', 'GST', 'Status'];
-    const rows = bookings.map((b) => [
-      b.guest_name, b.check_in_date, b.check_out_date,
-      b.subtotal, hostPlatformFee(b), hostPayout(b), b.total_price, b.gst_amount, b.status,
-    ]);
-    const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bookings.csv';
-    a.click();
+  const confirmCancel = async () => {
+    if (!cancelId) return;
+    setCancelling(true);
+    setError('');
+    try {
+      await bookingsApi.cancel(cancelId);
+      setCancelId(null);
+      await load();
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not cancel booking');
+    } finally {
+      setCancelling(false);
+    }
   };
 
   if (loading) return <Spinner label="Loading bookings..." />;
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h1 className="page-title">Manage Bookings</h1>
-        <button type="button" className="btn btn-outline btn-sm" onClick={exportCsv}>Export CSV</button>
-      </div>
+    <div className="host-page">
+      <h1 className="page-title">Bookings</h1>
+
       <div className="tabs">
-        {['All', 'Upcoming', 'Completed', 'Cancelled'].map((label, i) => (
+        {TAB_LABELS.map((label, i) => (
           <button
             key={label}
             type="button"
@@ -67,68 +73,67 @@ export default function ManageBookings() {
           </button>
         ))}
       </div>
-      <ErrorMessage message={error} onRetry={load} />
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Tourist</th>
-              <th>Room</th>
-              <th>Dates</th>
-              <th>Subtotal</th>
-              <th>Host fee</th>
-              <th>Your earnings</th>
-              <th>Guest paid</th>
-              <th>GST</th>
-              <th>Status</th>
-              <th>Check-in</th>
-              <th>Invoice</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b._id}>
-                <td>{b.guest_name}</td>
-                <td>{b.room_id?.slice(-6)}</td>
-                <td>{b.check_in_date} → {b.check_out_date}</td>
-                <td>{formatCurrency(b.subtotal)}</td>
-                <td className="text-danger">-{formatCurrency(hostPlatformFee(b))}</td>
-                <td><strong>{formatCurrency(hostPayout(b))}</strong></td>
-                <td>{formatCurrency(b.total_price)}</td>
-                <td>{formatCurrency(b.gst_amount)}</td>
-                <td><StatusBadge status={b.status} /></td>
-                <td>
-                  {b.check_in_verification ? (
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      onClick={() => setCheckInBooking(b)}
-                    >
-                      <ShieldCheck size={14} /> Verify
-                    </button>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td>
-                  <a href={`/api/bookings/${b._id}/invoice`} className="btn btn-ghost btn-sm" target="_blank" rel="noreferrer">
-                    <Download size={14} />
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      <Modal
-        open={!!checkInBooking}
-        onClose={() => setCheckInBooking(null)}
-        title="Check-in verification"
-        size="md"
-      >
-        {checkInBooking && <CheckInVerificationCard booking={checkInBooking} showBooker />}
-      </Modal>
+      <ErrorMessage message={error} onRetry={load} />
+
+      {bookings.length === 0 ? (
+        <p className="host-page__subtitle">No bookings found.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Guest Name</th>
+                <th>Room</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Nights</th>
+                <th>Amount</th>
+                <th>GST</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map((b) => (
+                <tr key={b._id || b.id}>
+                  <td>{b.guest_name}</td>
+                  <td>{b.room_title || b.room_id?.slice(-6)}</td>
+                  <td>{b.check_in_date}</td>
+                  <td>{b.check_out_date}</td>
+                  <td>{b.total_nights ?? '—'}</td>
+                  <td>{formatCurrency(b.subtotal)}</td>
+                  <td>{formatCurrency(b.gst_amount)}</td>
+                  <td>{formatCurrency(b.total_price)}</td>
+                  <td><StatusBadge status={b.status} /></td>
+                  <td>
+                    {b.status === 'confirmed' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setCancelId(b._id || b.id)}
+                        aria-label="Cancel booking"
+                      >
+                        <X size={14} /> Cancel
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!cancelId}
+        title="Cancel booking?"
+        message="This will cancel the booking and apply the cancellation policy."
+        confirmLabel={cancelling ? 'Cancelling…' : 'Cancel booking'}
+        onConfirm={confirmCancel}
+        onClose={() => !cancelling && setCancelId(null)}
+      />
     </div>
   );
 }

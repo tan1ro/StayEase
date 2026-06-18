@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -21,6 +21,7 @@ import SuperhostGuidanceModal from '../../components/host/SuperhostGuidanceModal
 import {
   DescriptionStep,
   FinishIntro,
+  BookingSettingsStep,
   HospitalityStep,
   OffersStep,
   PricingGstStep,
@@ -133,12 +134,23 @@ const WIZARD_STEPS = [
   { id: 'stay-vibes', section: 1 },
   { id: 'description', section: 1 },
   { id: 'intro-3', section: 2 },
-  { id: 'hospitality', section: 2 },
+  { id: 'booking-settings', section: 2 },
   { id: 'pricing-gst', section: 2 },
   { id: 'offers', section: 2 },
+  { id: 'hospitality', section: 2 },
   { id: 'safety', section: 2 },
   { id: 'review', section: 2 },
 ];
+
+const DRAFT_STORAGE_KEY = 'stayease.host.addRoomDraft';
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
 function bedConfigFromCount(count) {
   if (count <= 1) return 'single_bed';
@@ -168,6 +180,9 @@ function toApiPayload(form, { isAvailable = false } = {}) {
     alcohol_policy: form.alcohol_policy,
     view_type: form.view_type,
     has_balcony: form.has_balcony,
+    facing_side: form.facing_side || 'none',
+    floor_label: form.floor_label?.trim() || undefined,
+    view_description: form.view_description?.trim() || undefined,
     policies: form.policies,
     is_available: isAvailable,
   };
@@ -195,13 +210,21 @@ const defaultForm = {
   alcohol_policy: 'non_alcohol',
   view_type: 'none',
   has_balcony: false,
+  facing_side: 'none',
+  floor_label: '',
+  view_description: '',
   show_precise_location: true,
   stay_vibes: [],
   weekend_boost: 4,
+  booking_mode: 'review_first',
   planned_offers: [],
-  gst_registered: false,
+  safety_disclosures: {
+    noise_monitor: false,
+    weapons: false,
+  },
   amenities: [],
-  location: { address: '', city: 'Bangalore', area: '', lat: 12.97, lng: 77.59 },
+  // Default map center is Bangalore, but city can be anywhere.
+  location: { address: '', city: '', area: '', state: '', pincode: '', lat: 12.97, lng: 77.59 },
   policies: {
     check_in_time: '14:00',
     check_out_time: '11:00',
@@ -279,26 +302,38 @@ function CategoryGrid({ value, onChange }) {
   );
 }
 
-function PlaceTypeSummary({ roomCategory, placeType }) {
-  const match = PLACE_TYPES.find((placeTypeOption) => placeTypeOption.id === placeType)
-    || PLACE_TYPES.find((placeTypeOption) => placeTypeOption.categories.includes(roomCategory));
-
-  if (!match) return null;
+function PlaceTypeSummary({ roomCategory, placeType, onChange }) {
+  const selected =
+    PLACE_TYPES.find((placeTypeOption) => placeTypeOption.id === placeType)
+    || PLACE_TYPES.find((placeTypeOption) => placeTypeOption.categories.includes(roomCategory))
+    || PLACE_TYPES[0];
 
   return (
     <div className="listing-wizard__step listing-wizard__step--narrow">
       <h1 className="listing-wizard__title">What type of place will guests have?</h1>
       <p className="listing-wizard__subtitle">
-        Based on your <strong>{roomCategory}</strong> selection — this can&apos;t be changed here.
+        Based on your <strong>{roomCategory}</strong> selection. You can still change this here.
       </p>
-      <div className="listing-wizard__option-list">
-        <div className="listing-wizard__option-row listing-wizard__option-row--active listing-wizard__option-row--locked">
-          <div>
-            <strong>{match.label}</strong>
-            <p>{match.description}</p>
-          </div>
-          <Icon icon={match.icon} size={ICON.xl} />
-        </div>
+      <div className="listing-wizard__option-list" role="radiogroup" aria-label="Place type">
+        {PLACE_TYPES.map((opt) => {
+          const active = selected?.id === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              className={`listing-wizard__option-row ${active ? 'listing-wizard__option-row--active' : ''}`}
+              onClick={() => onChange?.(opt.id)}
+              role="radio"
+              aria-checked={active}
+            >
+              <div>
+                <strong>{opt.label}</strong>
+                <p>{opt.description}</p>
+              </div>
+              <Icon icon={opt.icon} size={ICON.xl} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -461,7 +496,69 @@ function WhoElseStep({ form, set, availableOptions }) {
 }
 
 function LocationStep({ form, setLoc, set }) {
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${form.location.lng - 0.02}%2C${form.location.lat - 0.02}%2C${form.location.lng + 0.02}%2C${form.location.lat + 0.02}&layer=mapnik&marker=${form.location.lat}%2C${form.location.lng}`;
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const mapZoom = 0.015;
+  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${form.location.lng - mapZoom}%2C${form.location.lat - mapZoom}%2C${form.location.lng + mapZoom}%2C${form.location.lat + mapZoom}&layer=mapnik&marker=${form.location.lat}%2C${form.location.lng}`;
+
+  useEffect(() => {
+    // Keep a readable query string in sync with fields.
+    const addr = [form.location.address, form.location.area, form.location.city].filter(Boolean).join(', ');
+    setQuery(addr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      setResults([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setGeoLoading(true);
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`;
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+        const data = await res.json();
+        setResults(Array.isArray(data) ? data : []);
+      } catch {
+        setResults([]);
+      } finally {
+        setGeoLoading(false);
+      }
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  const applyPlace = (place) => {
+    const addr = place?.address || {};
+    const city = addr.city || addr.town || addr.village || addr.county || form.location.city;
+    const state = addr.state || '';
+    const pincode = addr.postcode || '';
+    const area = addr.suburb || addr.neighbourhood || addr.city_district || form.location.area;
+    const addressLine = place?.display_name || query;
+
+    setLoc('address', addressLine);
+    setLoc('city', city);
+    setLoc('area', area);
+    setLoc('state', state);
+    setLoc('pincode', pincode);
+    setLoc('lat', Number(place.lat) || form.location.lat);
+    setLoc('lng', Number(place.lon) || form.location.lng);
+    setResults([]);
+  };
 
   return (
     <div className="listing-wizard__step listing-wizard__step--narrow">
@@ -471,22 +568,78 @@ function LocationStep({ form, setLoc, set }) {
       </p>
       <div className="form-group">
         <label className="label">Street address</label>
-        <input className="input" value={form.location.address} onChange={(e) => setLoc('address', e.target.value)} placeholder="Building, street, landmark" />
+        <input
+          className="input"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setLoc('address', e.target.value);
+          }}
+          placeholder="Building, street, landmark"
+          autoComplete="street-address"
+          onFocus={() => setFocused(true)}
+          onBlur={() => window.setTimeout(() => setFocused(false), 120)}
+        />
+        <p className="form-hint">Start typing to pick an address — we&apos;ll auto-fill state, pincode, and the map pin.</p>
+        {focused && (geoLoading || results.length > 0 || query.trim().length === 0 || query.trim().length < 3) && (
+          <div className="listing-wizard__geo-results" role="listbox" aria-label="Address suggestions">
+            {geoLoading && <div className="listing-wizard__geo-row listing-wizard__geo-row--muted">Searching…</div>}
+            {!geoLoading && query.trim().length === 0 && (
+              <div className="listing-wizard__geo-row listing-wizard__geo-row--muted">
+                Type an address (example: &quot;Indiranagar Bangalore&quot;) to see suggestions.
+              </div>
+            )}
+            {!geoLoading && query.trim().length > 0 && query.trim().length < 3 && (
+              <div className="listing-wizard__geo-row listing-wizard__geo-row--muted">
+                Keep typing to see location suggestions…
+              </div>
+            )}
+            {!geoLoading && query.trim().length >= 3 && results.length === 0 && (
+              <div className="listing-wizard__geo-row listing-wizard__geo-row--muted">
+                No matches yet — try adding city or pincode.
+              </div>
+            )}
+            {results.map((r) => (
+              <button
+                key={r.place_id}
+                type="button"
+                className="listing-wizard__geo-row"
+                onClick={() => applyPlace(r)}
+              >
+                <strong>{r.display_name}</strong>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="form-row">
         <div className="form-group">
           <label className="label">City</label>
-          <input className="input" value={form.location.city} onChange={(e) => setLoc('city', e.target.value)} />
+          <input className="input" value={form.location.city} onChange={(e) => setLoc('city', e.target.value)} placeholder="e.g. Bangalore" />
         </div>
         <div className="form-group">
           <label className="label">Area / neighbourhood</label>
-          <input className="input" value={form.location.area} onChange={(e) => setLoc('area', e.target.value)} />
+          <input className="input" value={form.location.area} onChange={(e) => setLoc('area', e.target.value)} placeholder="e.g. Indiranagar" />
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label className="label">State</label>
+          <input className="input" value={form.location.state || ''} onChange={(e) => setLoc('state', e.target.value)} placeholder="Auto-filled" />
+        </div>
+        <div className="form-group">
+          <label className="label">Pincode</label>
+          <input className="input" value={form.location.pincode || ''} onChange={(e) => setLoc('pincode', e.target.value)} placeholder="Auto-filled" inputMode="numeric" />
         </div>
       </div>
       <div className="listing-wizard__map">
         <div className="listing-wizard__map-pin">
           <Icon icon={MapPin} size={ICON.sm} />
-          <span>{form.location.address || `${form.location.area}, ${form.location.city}` || 'Pin your location'}</span>
+          <span>
+            {form.location.address
+              || [form.location.area, form.location.city, form.location.state, form.location.pincode].filter(Boolean).join(', ')
+              || 'Pin your location'}
+          </span>
         </div>
         <iframe title="Map preview" src={mapUrl} className="listing-wizard__map-frame" loading="lazy" />
       </div>
@@ -501,6 +654,36 @@ function LocationStep({ form, setLoc, set }) {
           onChange={(e) => set('show_precise_location', e.target.checked)}
         />
       </label>
+      <style>{`
+        .listing-wizard__geo-results {
+          margin-top: 0.5rem;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+          background: var(--card-bg, var(--surface));
+        }
+        .listing-wizard__geo-row {
+          width: 100%;
+          text-align: left;
+          border: 0;
+          background: transparent;
+          padding: 0.75rem 0.85rem;
+          cursor: pointer;
+          color: var(--text-primary);
+        }
+        .listing-wizard__geo-row:hover {
+          background: color-mix(in srgb, var(--primary) 8%, transparent);
+        }
+        .listing-wizard__geo-row--muted {
+          cursor: default;
+          color: var(--text-secondary);
+        }
+        .listing-wizard__geo-row strong {
+          font-weight: 600;
+          display: block;
+          line-height: 1.35;
+        }
+      `}</style>
     </div>
   );
 }
@@ -522,6 +705,43 @@ function ListingWizard({ initial = defaultForm }) {
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
   const setLoc = (key, val) => setForm((f) => ({ ...f, location: { ...f.location, [key]: val } }));
   const setPol = (key, val) => setForm((f) => ({ ...f, policies: { ...f.policies, [key]: val } }));
+
+  // Restore wizard stage + draft room on reload.
+  useEffect(() => {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    const saved = raw ? safeJsonParse(raw) : null;
+    if (!saved?.roomId || typeof saved?.stepId !== 'string') return;
+
+    const idx = WIZARD_STEPS.findIndex((s) => s.id === saved.stepId);
+    if (idx >= 0) setStepIndex(idx);
+    setRoomId(saved.roomId);
+
+    roomsApi
+      .get(saved.roomId)
+      .then(({ data }) => {
+        setPhotos(data.photos || []);
+        setForm((prev) => ({
+          ...prev,
+          ...data,
+          location: { ...prev.location, ...(data.location || {}) },
+          policies: { ...prev.policies, ...(data.policies || {}) },
+          amenities: data.amenities || prev.amenities,
+          planned_offers: data.planned_offers || prev.planned_offers,
+        }));
+      })
+      .catch(() => {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      });
+  }, []);
+
+  // Persist wizard stage as the user progresses.
+  useEffect(() => {
+    if (!roomId && step.id === 'intro-1') return;
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ roomId, stepId: step.id, updatedAt: Date.now() }),
+    );
+  }, [roomId, step.id]);
 
   const sectionProgress = useMemo(() => {
     const stepsInSection = WIZARD_STEPS.filter((s) => s.section === step.section);
@@ -576,11 +796,44 @@ function ListingWizard({ initial = defaultForm }) {
     setError('');
     try {
       const { data } = await roomsApi.uploadPhoto(id, file);
-      setPhotos(data.photos || []);
+      // API returns the uploaded photo object (not the full room).
+      setPhotos((prev) => {
+        const next = [...(prev || []), data].filter((p) => p && p.url);
+        // Ensure only one primary photo.
+        const hasPrimary = next.some((p) => p.is_primary);
+        if (!hasPrimary && next.length) next[0] = { ...next[0], is_primary: true };
+        return next;
+      });
     } catch (err) {
       setError(err.normalized?.message || 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleReorderPhotos = async (next) => {
+    setPhotos(next);
+    if (!roomId) return;
+    try {
+      await roomsApi.reorderPhotos(roomId, next.map((p) => p.public_id).filter(Boolean));
+    } catch {
+      // If it fails, keep local order; backend order will update next save.
+    }
+  };
+
+  const handleDeletePhoto = async (photo) => {
+    const pid = photo?.public_id;
+    if (!pid) {
+      setPhotos((prev) => (prev || []).filter((p) => p !== photo));
+      return;
+    }
+
+    const id = roomId || await ensureDraft();
+    try {
+      await roomsApi.deletePhoto(id, pid);
+      setPhotos((prev) => (prev || []).filter((p) => p?.public_id !== pid));
+    } catch (err) {
+      throw new Error(err.normalized?.message || 'Could not delete photo');
     }
   };
 
@@ -618,6 +871,7 @@ function ListingWizard({ initial = defaultForm }) {
         id = data._id;
       }
       setPublished({ id, title: form.title.trim() });
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
     } catch (err) {
       setError(err.normalized?.message || 'Publish failed');
     } finally {
@@ -661,6 +915,15 @@ function ListingWizard({ initial = defaultForm }) {
           <PlaceTypeSummary
             roomCategory={form.room_category}
             placeType={form.place_type}
+            onChange={(nextPlaceType) => {
+              setForm((current) => ({
+                ...current,
+                place_type: nextPlaceType,
+                // lock question doesn't apply to shared rooms
+                bedroom_has_lock: nextPlaceType === 'shared' ? null : current.bedroom_has_lock,
+                who_else_there: sanitizeWhoElse(current.who_else_there, nextPlaceType, current.room_category),
+              }));
+            }}
           />
         );
       case 'location':
@@ -718,7 +981,13 @@ function ListingWizard({ initial = defaultForm }) {
             </p>
             <div className="listing-wizard__photo-drop">
               <Icon icon={Camera} size={48} />
-              <ImageUploader photos={photos} onUpload={handlePhotoUpload} uploading={uploading} />
+              <ImageUploader
+                photos={photos}
+                onUpload={handlePhotoUpload}
+                uploading={uploading}
+                onReorder={handleReorderPhotos}
+                onDelete={handleDeletePhoto}
+              />
             </div>
           </div>
         );
@@ -749,6 +1018,13 @@ function ListingWizard({ initial = defaultForm }) {
         );
       case 'intro-3':
         return <FinishIntro />;
+      case 'booking-settings':
+        return (
+          <BookingSettingsStep
+            bookingMode={form.booking_mode}
+            onBookingMode={(v) => set('booking_mode', v)}
+          />
+        );
       case 'hospitality':
         return <HospitalityStep form={form} set={set} setPol={setPol} />;
       case 'pricing-gst':
@@ -772,8 +1048,8 @@ function ListingWizard({ initial = defaultForm }) {
           <SafetyStep
             amenities={form.amenities}
             onAmenitiesChange={(v) => set('amenities', v)}
-            gstRegistered={form.gst_registered}
-            onGstRegistered={(v) => set('gst_registered', v)}
+            safetyDisclosures={form.safety_disclosures}
+            onSafetyDisclosuresChange={(v) => set('safety_disclosures', v)}
           />
         );
       case 'review':
@@ -831,9 +1107,10 @@ function ListingWizard({ initial = defaultForm }) {
 // Legacy single-page form for editing existing rooms
 function RoomForm({ initial = defaultForm, roomId, isEdit }) {
   const navigate = useNavigate();
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState({ ...defaultForm, ...initial, location: { ...defaultForm.location, ...(initial.location || {}) }, policies: { ...defaultForm.policies, ...(initial.policies || {}) } });
   const [photos, setPhotos] = useState(initial.photos || []);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -844,16 +1121,18 @@ function RoomForm({ initial = defaultForm, roomId, isEdit }) {
   const save = async (publish) => {
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
-      const payload = { ...form, is_available: publish };
+      const payload = toApiPayload(form, { isAvailable: publish });
       if (isEdit) {
         await roomsApi.update(roomId, payload);
-      } else {
-        const { data } = await roomsApi.create(payload);
-        navigate(`/host/rooms/edit/${data._id}`);
+        setSuccess(publish ? 'Listing published successfully.' : 'Draft saved successfully.');
+        setTimeout(() => navigate('/host/rooms'), 1200);
         return;
       }
-      navigate('/host/rooms');
+      await roomsApi.create(payload);
+      setSuccess(publish ? 'Listing created successfully.' : 'Draft saved successfully.');
+      setTimeout(() => navigate('/host/rooms'), 1200);
     } catch (err) {
       setError(err.normalized?.message || 'Save failed');
     } finally {
@@ -866,7 +1145,12 @@ function RoomForm({ initial = defaultForm, roomId, isEdit }) {
     setUploading(true);
     try {
       const { data } = await roomsApi.uploadPhoto(roomId, file);
-      setPhotos(data.photos || []);
+      setPhotos((prev) => {
+        const next = [...(prev || []), data].filter((p) => p && p.url);
+        const hasPrimary = next.some((p) => p.is_primary);
+        if (!hasPrimary && next.length) next[0] = { ...next[0], is_primary: true };
+        return next;
+      });
     } catch (err) {
       setError(err.normalized?.message || 'Upload failed');
     } finally {
@@ -874,9 +1158,38 @@ function RoomForm({ initial = defaultForm, roomId, isEdit }) {
     }
   };
 
+  const handleReorderPhotos = async (next) => {
+    setPhotos(next);
+    try {
+      await roomsApi.reorderPhotos(roomId, next.map((p) => p.public_id).filter(Boolean));
+    } catch {
+      // keep local order on failure
+    }
+  };
+
+  const handleDeletePhoto = async (photo) => {
+    const pid = photo?.public_id;
+    if (!pid) {
+      setPhotos((prev) => (prev || []).filter((p) => p !== photo));
+      return;
+    }
+
+    try {
+      await roomsApi.deletePhoto(roomId, pid);
+      setPhotos((prev) => (prev || []).filter((p) => p?.public_id !== pid));
+    } catch (err) {
+      throw new Error(err.normalized?.message || 'Could not delete photo');
+    }
+  };
+
   return (
     <form onSubmit={(e) => e.preventDefault()}>
       <ErrorMessage message={error} />
+      {success && (
+        <p className="form-success" role="status" style={{ color: 'var(--success)', marginBottom: '1rem' }}>
+          {success}
+        </p>
+      )}
       <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
         <h2>Basic Info</h2>
         <div className="form-row">
@@ -913,7 +1226,7 @@ function RoomForm({ initial = defaultForm, roomId, isEdit }) {
       {isEdit && (
         <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
           <h2>Photos</h2>
-          <ImageUploader photos={photos} onUpload={handlePhotoUpload} uploading={uploading} />
+          <ImageUploader photos={photos} onUpload={handlePhotoUpload} uploading={uploading} onReorder={handleReorderPhotos} onDelete={handleDeletePhoto} />
         </section>
       )}
 

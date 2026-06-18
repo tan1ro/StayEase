@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BarChart,
@@ -18,11 +18,11 @@ import RoomCard from '../../components/RoomCard';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import WriteReviewModal from '../../components/WriteReviewModal';
-import { analyticsApi, authApi, bookingsApi, referralsApi, roomsApi } from '../../api/api';
+import { analyticsApi, authApi, bookingsApi, fetchBookings, referralsApi, roomsApi } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../api/api';
 
-const TABS = ['About me', 'Past trips', 'Wishlist', 'Dashboard'];
+const TABS = ['About me', 'Past trips', 'Wishlist', 'My Spending', 'Dashboard'];
 const PIE_COLORS = ['#4F7FE8', '#6B9AFF', '#E85D75', '#E8A84F'];
 
 export default function Profile() {
@@ -40,6 +40,8 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [spendingBookings, setSpendingBookings] = useState([]);
+  const [spendingLoading, setSpendingLoading] = useState(false);
   const [reviewBooking, setReviewBooking] = useState(null);
 
   useEffect(() => {
@@ -67,7 +69,15 @@ export default function Profile() {
       Promise.all(user.wishlist.map((id) => roomsApi.get(id).then((r) => r.data).catch(() => null)))
         .then((rooms) => setWishlistRooms(rooms.filter(Boolean)));
     }
-    if (tab === 3) {
+    if (tab === 3 && user) {
+      setSpendingLoading(true);
+      const guestId = user.id || user._id;
+      fetchBookings({ guest_id: guestId })
+        .then(setSpendingBookings)
+        .catch(() => setSpendingBookings([]))
+        .finally(() => setSpendingLoading(false));
+    }
+    if (tab === 4) {
       analyticsApi.guestDashboard().then(({ data }) => setDashboard(data)).catch(() => {});
     }
     referralsApi.stats().then(({ data }) => setReferralStats(data)).catch(() => {});
@@ -102,6 +112,46 @@ export default function Profile() {
     { name: 'Confirmed', value: dashboard?.upcoming_trips || 0 },
     { name: 'Total', value: dashboard?.total_bookings || 0 },
   ];
+
+  const spendingStats = useMemo(() => {
+    const paid = spendingBookings.filter((b) => b.status !== 'cancelled');
+    const totalSpent = paid.reduce((s, b) => s + (b.total_price || 0), 0);
+    const totalNights = paid.reduce((s, b) => s + (b.total_nights || 0), 0);
+    const totalGst = paid.reduce((s, b) => s + (b.gst_amount || 0), 0);
+    const avgPerNight = totalNights ? totalSpent / totalNights : 0;
+
+    const monthMap = {};
+    paid.forEach((b) => {
+      const key = (b.check_in_date || '').slice(0, 7);
+      if (!key) return;
+      monthMap[key] = (monthMap[key] || 0) + (b.total_price || 0);
+    });
+    const monthlyData = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, spent]) => ({
+        month: new Date(`${month}-01T12:00:00`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+        spent,
+      }));
+
+    const cityMap = {};
+    paid.forEach((b) => {
+      const city = b.room_city || b.location?.city || 'Unknown';
+      cityMap[city] = (cityMap[city] || 0) + (b.total_price || 0);
+    });
+    const topCity = Object.entries(cityMap).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+    const statusCounts = {};
+    spendingBookings.forEach((b) => {
+      const st = b.status || 'unknown';
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+    });
+    const spendingStatusData = Object.entries(statusCounts).map(([name, value]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value,
+    }));
+
+    return { totalSpent, totalNights, totalGst, avgPerNight, monthlyData, topCity, spendingStatusData };
+  }, [spendingBookings]);
 
   return (
     <div>
@@ -166,7 +216,7 @@ export default function Profile() {
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {b.can_review && (
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => setReviewBooking(b)}>
-                      <Star size={14} /> Rate stay
+                      <Star size={14} /> Rate hotel
                     </button>
                   )}
                   <Link to={`/receipt/${b._id}`} className="btn btn-outline btn-sm"><Download size={14} /> Invoice</Link>
@@ -189,6 +239,54 @@ export default function Profile() {
       )}
 
       {tab === 3 && (
+        spendingLoading ? (
+          <Spinner label="Loading spending..." />
+        ) : (
+          <>
+            <div className="stat-cards">
+              <div className="stat-card card"><div className="stat-card__label">Total spent</div><div className="stat-card__value">{formatCurrency(spendingStats.totalSpent)}</div></div>
+              <div className="stat-card card"><div className="stat-card__label">Nights stayed</div><div className="stat-card__value">{spendingStats.totalNights}</div></div>
+              <div className="stat-card card"><div className="stat-card__label">Avg / night</div><div className="stat-card__value">{formatCurrency(spendingStats.avgPerNight)}</div></div>
+              <div className="stat-card card"><div className="stat-card__label">GST paid</div><div className="stat-card__value">{formatCurrency(spendingStats.totalGst)}</div></div>
+            </div>
+            <p className="listing-muted" style={{ marginBottom: '1rem' }}>Top city: <strong>{spendingStats.topCity}</strong></p>
+            <div className="grid-2">
+              <div className="card" style={{ padding: '1rem', height: 280 }}>
+                <h3>Monthly spending</h3>
+                {spendingStats.monthlyData.length === 0 ? (
+                  <p className="listing-muted">No spending data yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="90%">
+                    <BarChart data={spendingStats.monthlyData}>
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(v) => formatCurrency(v)} />
+                      <Bar dataKey="spent" fill="#4F7FE8" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+              <div className="card" style={{ padding: '1rem', height: 280 }}>
+                <h3>Booking status</h3>
+                {spendingStats.spendingStatusData.length === 0 ? (
+                  <p className="listing-muted">No bookings yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="90%">
+                    <PieChart>
+                      <Pie data={spendingStats.spendingStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                        {spendingStats.spendingStatusData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </>
+        )
+      )}
+
+      {tab === 4 && (
         dashboard ? (
           <>
             <div className="stat-cards">

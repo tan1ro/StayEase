@@ -12,7 +12,11 @@ export default function LegalPage({ title, updated, sections, children }) {
         </nav>
         <div className="legal-toc__links">
           <Link to="/privacy-policy">Privacy Policy</Link>
+          <Link to="/cookie-policy">Cookie Policy</Link>
           <Link to="/terms">Terms of Service</Link>
+          <Link to="/help/local-laws">Local laws &amp; taxes</Link>
+          <Link to="/help/nondiscrimination">Nondiscrimination Policy</Link>
+          <Link to="/help/service-fees">Service fees</Link>
         </div>
       </aside>
       <article className="legal-content">

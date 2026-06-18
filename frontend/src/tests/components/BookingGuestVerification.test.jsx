@@ -40,4 +40,22 @@ describe('BookingGuestVerification', () => {
     rerender(<BookingGuestVerification value={state} onChange={onChange} user={null} />);
     expect(input).toHaveValue('ABCDE1234F');
   });
+
+  it('shows formatted saved ID checkbox when user has identity proof on file', () => {
+    const user = {
+      identity_proof: {
+        type: 'aadhar',
+        number: '432432534543',
+        document_url: 'https://example.com/id.png',
+      },
+    };
+    const state = defaultGuestVerification(user);
+
+    render(
+      <BookingGuestVerification value={state} onChange={vi.fn()} user={user} />,
+    );
+
+    expect(screen.getByRole('checkbox', { name: /use saved id on file/i })).toBeChecked();
+    expect(screen.getByText(/Aadhar · 4324 3253 4543/)).toBeInTheDocument();
+  });
 });

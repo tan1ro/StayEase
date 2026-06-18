@@ -9,6 +9,9 @@ class Settings(BaseSettings):
 
     MONGO_URI: str
     MONGO_DB_NAME: str
+    MONGO_REPLICA_SET_INIT: bool = False
+    MONGO_REPLICA_SET_NAME: str = "rs0"
+    MONGO_REPLICA_SET_HOST: str = "localhost:27017"
 
     JWT_SECRET: str
     JWT_EXPIRE_MINUTES: int

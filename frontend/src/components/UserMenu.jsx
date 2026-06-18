@@ -48,19 +48,19 @@ export default function UserMenu() {
   const menuItems = [
     { to: '/wishlist', icon: Heart, label: 'Wishlists' },
     { to: '/bookings', icon: Plane, label: 'Trips' },
-    { disabled: true, icon: MessageCircle, label: 'Messages' },
+    { to: '/messages', icon: MessageCircle, label: 'Messages' },
     { to: '/profile', icon: User, label: 'Profile' },
     { divider: true },
-    { disabled: true, icon: Bell, label: 'Notifications' },
+    { to: '/notifications', icon: Bell, label: 'Notifications' },
     { to: canAccessHostPortal ? '/host/settings' : '/settings', icon: Settings, label: 'Account settings' },
     { disabled: true, icon: Globe, label: 'Languages & currency (INR)' },
-    { disabled: true, icon: HelpCircle, label: 'Help Centre' },
+    { to: '/help', icon: HelpCircle, label: 'Help Centre' },
     { divider: true },
     canAccessHostPortal
-      ? { to: '/', icon: Home, label: 'Switch to tourist' }
+      ? { to: '/', icon: Home, label: 'Switch to guest' }
       : { to: '/register?as=host', icon: Home, label: 'Become a host' },
     ...(canAccessHostPortal
-      ? [{ to: '/host', icon: Building2, label: 'Switch to host' }]
+      ? [{ to: '/host', icon: Building2, label: 'Host dashboard' }]
       : []),
     { divider: true },
     { action: handleLogout, icon: LogOut, label: 'Log out' },

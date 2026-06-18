@@ -31,22 +31,36 @@ os.environ.setdefault("OPEN_METEO_BASE_URL", "https://api.open-meteo.com")
 os.environ.setdefault("GST_RATE", "0.18")
 os.environ.setdefault("GST_NUMBER", "TEST_GST")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
+os.environ["GUEST_PLATFORM_FEE_PERCENT"] = "10.0"
+os.environ["HOST_PLATFORM_FEE_PERCENT"] = "3.0"
 
+import database as db_module
 from database import database  # noqa: E402
 from main import create_app  # noqa: E402
 from services.auth import hash_password  # noqa: E402
 from models.common import utc_now  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def override_platform_fees():
+    from config import settings
+
+    settings.GUEST_PLATFORM_FEE_PERCENT = 10.0
+    settings.HOST_PLATFORM_FEE_PERCENT = 3.0
+
+
 @pytest.fixture
 async def mock_db():
     client = AsyncMongoMockClient()
     db = client["stayease_test"]
-    database._client = client
-    database._db = db
+    db_module._client = client
+    db_module._db = db
+    await db_module.ensure_indexes()
+    db_module._transactions_available = False
     yield db
-    database._client = None
-    database._db = None
+    db_module._client = None
+    db_module._db = None
+    db_module._transactions_available = False
 
 
 @pytest.fixture
@@ -123,6 +137,9 @@ async def seed_data(mock_db):
             "smoking_policy": "non_smoking",
             "alcohol_policy": "non_alcohol",
             "view_type": "hill_view",
+            "facing_side": "east",
+            "floor_label": "2nd floor",
+            "view_description": "East-facing windows with hill views at sunrise.",
             "has_balcony": True,
             "policies": {
                 "check_in_time": "14:00",
@@ -156,6 +173,9 @@ async def seed_data(mock_db):
             "smoking_policy": "smoking",
             "alcohol_policy": "alcohol",
             "view_type": "beach_view",
+            "facing_side": "west",
+            "floor_label": "Ground floor",
+            "view_description": "West-facing patio steps onto the beach.",
             "has_balcony": False,
             "policies": {
                 "check_in_time": "14:00",

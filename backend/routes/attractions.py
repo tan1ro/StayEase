@@ -23,17 +23,16 @@ async def get_attractions(city: str):
 
 @router.get("/weather/{lat}/{lon}")
 async def get_weather(lat: float, lon: float):
-    url = (
-        f"{settings.OPEN_METEO_BASE_URL.rstrip('/')}/forecast"
-        f"?latitude={lat}&longitude={lon}"
-        "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m"
-        "&daily=temperature_2m_max,temperature_2m_min,weather_code"
-        "&timezone=auto"
-    )
+    base = settings.OPEN_METEO_BASE_URL.rstrip("/")
+    if base.endswith("/v1"):
+        url = f"{base}/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+    else:
+        url = f"{base}/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            return data.get("current_weather", data)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail="Weather service unavailable") from e
