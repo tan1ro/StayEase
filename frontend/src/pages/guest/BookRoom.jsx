@@ -24,6 +24,7 @@ import {
 } from '../../api/api';
 import { useMultiRoomPricing } from '../../hooks/useMultiRoomPricing';
 import { useAuth } from '../../context/AuthContext';
+import { isRoomAvailableForDates } from '../../utils/adjacentRooms';
 import { addDaysISO, todayISO, BOOKING_CALENDAR_MONTHS } from '../../utils/dates';
 
 function formatStayDate(iso) {
@@ -132,6 +133,17 @@ export default function BookRoom() {
 
   const activeRoomIds = selectedRoomIds.length ? selectedRoomIds : [roomId];
 
+  const unavailableSelectedRooms = useMemo(
+    () => propertyRooms.filter(
+      (item) => activeRoomIds.includes(item._id) && !isRoomAvailableForDates(item),
+    ),
+    [propertyRooms, activeRoomIds],
+  );
+
+  const hasUnavailableSelection = unavailableSelectedRooms.length > 0 || (
+    propertyRooms.length > 0 && activeRoomIds.length === 0
+  );
+
   const { pricing, loading: pricingLoading, error: pricingError, nights } = useMultiRoomPricing(
     activeRoomIds,
     dateValidationError ? '' : checkIn,
@@ -234,6 +246,11 @@ export default function BookRoom() {
     }
     if (!acceptedTerms) {
       setError('Please accept the Terms of Service, Privacy Policy, and Cookie Policy to continue');
+      return;
+    }
+    if (hasUnavailableSelection) {
+      setError('One or more selected rooms are already booked. Pick an open room from the floor map.');
+      scrollToSection('booking-step-room');
       return;
     }
 
@@ -616,7 +633,7 @@ export default function BookRoom() {
             <button
               type="submit"
               className="btn btn-primary book-room__submit"
-              disabled={submitting || !datesReady || !acceptedTerms}
+              disabled={submitting || !datesReady || !acceptedTerms || hasUnavailableSelection || !activeRoomIds.length}
             >
               {submitting ? 'Confirming…' : 'Confirm Booking'}
             </button>

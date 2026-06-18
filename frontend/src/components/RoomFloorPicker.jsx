@@ -7,7 +7,7 @@ import {
   getSunlightTraits,
   groupRoomsByFloor,
 } from '../constants/roomPlacement';
-import { canToggleRoom, toggleRoomSelection } from '../utils/adjacentRooms';
+import { canToggleRoom, isRoomAvailableForDates, resolveAvailableSelection, toggleRoomSelection } from '../utils/adjacentRooms';
 import RoomPlacementInfo from './RoomPlacementInfo';
 import Spinner from './Spinner';
 
@@ -30,15 +30,15 @@ function RoomTile({
   const { sunrise, sunset } = getSunlightTraits(room.facing_side);
   const view = formatViewType(room.view_type);
   const ViewIcon = viewIcon(room.view_type);
-  const isBooked = room.available_for_dates === false;
+  const isBooked = !isRoomAvailableForDates(room);
   const query = new URLSearchParams({ check_in: checkIn, check_out: checkOut });
 
   const tileClass = [
     'room-floor-picker__tile',
-    isSelected && 'room-floor-picker__tile--selected',
+    isBooked && 'room-floor-picker__tile--booked',
+    !isBooked && isSelected && 'room-floor-picker__tile--selected',
     !isSelected && !isBooked && canSelect && 'room-floor-picker__tile--available',
     !isSelected && !isBooked && !canSelect && multiSelect && 'room-floor-picker__tile--blocked',
-    isBooked && 'room-floor-picker__tile--booked',
   ].filter(Boolean).join(' ');
 
   const content = (
@@ -170,21 +170,31 @@ export default function RoomFloorPicker({
   }, [roomId, checkIn, checkOut]);
 
   const allRooms = useMemo(() => {
-    if (!propertyRooms.length && currentRoom) {
-      return [{ ...currentRoom, available_for_dates: true }];
-    }
+    if (!propertyRooms.length) return [];
     return propertyRooms;
-  }, [propertyRooms, currentRoom]);
+  }, [propertyRooms]);
+
+  const activeSelectedIds = selectedRoomIds.length ? selectedRoomIds : (roomId ? [roomId] : []);
+
+  useEffect(() => {
+    if (!propertyRooms.length || !onChangeSelectedRoomIds) return;
+    const currentIds = selectedRoomIds.length ? selectedRoomIds : (roomId ? [roomId] : []);
+    const { ids, notice } = resolveAvailableSelection(currentIds, propertyRooms, roomId);
+    if (ids.join(',') !== currentIds.join(',')) {
+      onChangeSelectedRoomIds(ids);
+    }
+    setSelectionNotice(notice);
+  }, [propertyRooms, checkIn, checkOut, roomId, onChangeSelectedRoomIds]);
 
   useEffect(() => {
     onPropertyRoomsChange?.(allRooms);
   }, [allRooms, onPropertyRoomsChange]);
 
-  const activeSelectedIds = selectedRoomIds.length ? selectedRoomIds : (roomId ? [roomId] : []);
-
   const selectedRoom = useMemo(
-    () => allRooms.find((r) => r._id === roomId) || currentRoom,
-    [allRooms, roomId, currentRoom],
+    () => allRooms.find((r) => activeSelectedIds.includes(r._id))
+      || allRooms.find((r) => r._id === roomId)
+      || currentRoom,
+    [allRooms, activeSelectedIds, roomId, currentRoom],
   );
 
   const selectedRooms = useMemo(
@@ -198,9 +208,17 @@ export default function RoomFloorPicker({
     [floorGroups],
   );
   const hasMultipleRooms = allRooms.length > 1;
+  const openRoomCount = useMemo(
+    () => allRooms.filter(isRoomAvailableForDates).length,
+    [allRooms],
+  );
 
   const handleToggleRoom = (room) => {
     if (!multiSelect || !onChangeSelectedRoomIds) return;
+    if (!isRoomAvailableForDates(room)) {
+      setSelectionNotice(`Room ${room.room_number} is already booked for these dates. Pick an open room.`);
+      return;
+    }
     const next = toggleRoomSelection(room, activeSelectedIds, allRooms);
     if (next.join(',') === activeSelectedIds.join(',')) {
       setSelectionNotice('Choose rooms next to each other on the same floor.');
@@ -220,12 +238,36 @@ export default function RoomFloorPicker({
 
   if (loading) return <Spinner label="Loading rooms…" />;
 
+  if (!propertyRooms.length) {
+    return (
+      <p className="room-floor-picker__hint">
+        No rooms are available for these dates at this property. Try different dates or join the waitlist below.
+      </p>
+    );
+  }
+
+  if (openRoomCount === 0) {
+    return (
+      <p className="room-floor-picker__hint">
+        All rooms are booked for these dates. Try different dates or join the waitlist below.
+      </p>
+    );
+  }
+
   if (!selectedRoom) return null;
 
   if (!hasMultipleRooms) {
+    const onlyRoom = allRooms[0];
+    if (!isRoomAvailableForDates(onlyRoom)) {
+      return (
+        <p className="room-floor-picker__hint">
+          This room is booked for your dates. Try different dates or join the waitlist below.
+        </p>
+      );
+    }
     return (
       <section className="room-floor-picker room-floor-picker--single" aria-label="Your room">
-        <RoomPlacementInfo room={selectedRoom} title="Your room" />
+        <RoomPlacementInfo room={onlyRoom} title="Your room" />
       </section>
     );
   }

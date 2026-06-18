@@ -133,20 +133,26 @@ export default function TripsTable({
                       onClick={() => toggleExpanded(bookingId)}
                       aria-expanded={expanded}
                     >
-                      <span className="trips-table__txn-amount">{formatCurrency(booking.total_price ?? 0)}</span>
-                      <span className="trips-table__txn-meta">
-                        {gst > 0 ? `incl. ${formatCurrency(gst)} GST` : formatTransactionSummary(booking)}
+                      <span className="trips-table__txn-copy">
+                        <span className="trips-table__txn-amount">{formatCurrency(booking.total_price ?? 0)}</span>
+                        <span className="trips-table__txn-meta">
+                          {gst > 0 ? `incl. ${formatCurrency(gst)} GST` : formatTransactionSummary(booking)}
+                        </span>
                       </span>
-                      {expanded ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
+                      <span className="trips-table__txn-chevron" aria-hidden="true">
+                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </span>
                     </button>
                   </td>
                   <td className="trips-table__status" data-label="Status">
-                    <StatusBadge status={booking.status} />
-                    {booking.payment_status && booking.payment_status !== 'paid' && (
-                      <Badge variant={getStatusBadgeVariant(booking.payment_status)}>
-                        {formatPaymentStatusLabel(booking.payment_status)}
-                      </Badge>
-                    )}
+                    <div className="trips-table__status-badges">
+                      <StatusBadge status={booking.status} />
+                      {booking.payment_status && booking.payment_status !== 'paid' && (
+                        <Badge variant={getStatusBadgeVariant(booking.payment_status)}>
+                          {formatPaymentStatusLabel(booking.payment_status)}
+                        </Badge>
+                      )}
+                    </div>
                     {booking.status === 'cancelled' && booking.refund_amount != null && (
                       <span className="booking-refund-note">
                         Refund: {formatCurrency(booking.refund_amount)}

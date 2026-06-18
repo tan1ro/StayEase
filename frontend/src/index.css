@@ -3881,15 +3881,6 @@ html.dark .filter-group__label {
     min-width: 9rem;
   }
 
-  .trips-table__actions {
-    justify-content: flex-start;
-  }
-
-  .trips-table th:last-child,
-  .trips-table td:last-child {
-    text-align: left;
-  }
-
   .hide-mobile {
     display: none !important;
   }
@@ -4110,6 +4101,43 @@ html.dark .filter-group__label {
 .trips-table th,
 .trips-table td {
   vertical-align: middle;
+  padding: 0.85rem 1rem;
+}
+
+@media (min-width: 769px) {
+  .trips-table {
+    table-layout: fixed;
+  }
+
+  .trips-table th:nth-child(1),
+  .trips-table td:nth-child(1) {
+    width: 24%;
+  }
+
+  .trips-table th:nth-child(2),
+  .trips-table td:nth-child(2) {
+    width: 13%;
+  }
+
+  .trips-table th:nth-child(3),
+  .trips-table td:nth-child(3) {
+    width: 12%;
+  }
+
+  .trips-table th:nth-child(4),
+  .trips-table td:nth-child(4) {
+    width: 14%;
+  }
+
+  .trips-table th:nth-child(5),
+  .trips-table td:nth-child(5) {
+    width: 12%;
+  }
+
+  .trips-table th:nth-child(6),
+  .trips-table td:nth-child(6) {
+    width: 25%;
+  }
 }
 
 .trips-table-wrap {
@@ -4117,6 +4145,10 @@ html.dark .filter-group__label {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface);
+}
+
+.trips-table-wrap.table-wrap {
+  overflow-x: auto;
 }
 
 .trips-table thead th {
@@ -4205,18 +4237,21 @@ html.dark .filter-group__label {
   margin-top: 0.15rem;
   font-size: 0.78rem;
   color: var(--text-muted);
+  line-height: 1.3;
 }
 
 .trips-table__booked time {
   display: block;
   font-weight: 500;
   color: var(--text-primary);
+  line-height: 1.3;
 }
 
 .trips-table__txn-toggle {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.65rem;
+  width: 100%;
   border: none;
   background: none;
   padding: 0;
@@ -4224,6 +4259,22 @@ html.dark .filter-group__label {
   text-align: left;
   cursor: pointer;
   color: inherit;
+}
+
+.trips-table__txn-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.trips-table__txn-chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
 }
 
 .trips-table__txn-toggle:hover .trips-table__txn-amount {
@@ -4256,7 +4307,7 @@ html.dark .filter-group__label {
 }
 
 .trips-table th:last-child,
-.trips-table td:last-child {
+.trips-table td.trips-table__actions-cell {
   text-align: right;
 }
 
@@ -4273,6 +4324,7 @@ html.dark .filter-group__label {
 }
 
 .trips-table__dates,
+.trips-table__booked,
 .trips-table__guests,
 .trips-table__total,
 .trips-table__payment {
@@ -4280,22 +4332,42 @@ html.dark .filter-group__label {
 }
 
 .trips-table__status {
+  vertical-align: middle;
+}
+
+.trips-table__status-badges {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.3rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.trips-table__status .booking-refund-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.trips-table__actions-cell {
+  vertical-align: middle;
 }
 
 .trips-table__actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin-left: auto;
+  width: 100%;
+  max-width: 11.5rem;
 }
 
 .trips-table__actions .btn-sm {
   min-height: 2rem;
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .rate-stay-banner {
@@ -14611,23 +14683,34 @@ html.dark .host-editor__preview {
   .trips-table td.trips-table__actions-cell {
     flex-direction: column;
     align-items: stretch;
-    padding-top: 0.5rem;
-    margin-top: 0.35rem;
+    padding-top: 0.65rem;
+    margin-top: 0.5rem;
     border-top: 1px solid var(--border);
+    text-align: left !important;
   }
 
   .trips-table td.trips-table__actions-cell::before {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.35rem;
   }
 
   .trips-table .trips-table__actions {
     width: 100%;
-    justify-content: flex-start;
+    max-width: none;
+    margin-left: 0;
   }
 
   .trips-table .trips-table__actions .btn {
-    flex: 1;
+    flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .trips-table td.trips-table__total {
+    align-items: flex-start;
+  }
+
+  .trips-table__txn-toggle {
+    width: auto;
+    margin-left: auto;
   }
 
   .table-wrap {
