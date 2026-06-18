@@ -355,13 +355,18 @@ async def get_next_available(
         if not host_id or not city:
             return {"check_in": None, "check_out": None, "nights": nights}
 
-        siblings = await db["rooms"].find(
-            {
-                "host_id": host_id,
-                "location.city": city,
-                "is_available": True,
-            }
-        ).sort("room_number", 1).to_list(50)
+        siblings = (
+            await db["rooms"]
+            .find(
+                {
+                    "host_id": host_id,
+                    "location.city": city,
+                    "is_available": True,
+                }
+            )
+            .sort("room_number", 1)
+            .to_list(50)
+        )
 
         room_sets = []
         for sibling in siblings:

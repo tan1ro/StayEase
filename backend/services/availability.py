@@ -29,7 +29,9 @@ def booking_ranges_overlap(
     check_in: date, check_out: date, booking_ranges: list[tuple[str, str]]
 ) -> bool:
     for start_raw, end_raw in booking_ranges:
-        start = date.fromisoformat(start_raw) if isinstance(start_raw, str) else start_raw
+        start = (
+            date.fromisoformat(start_raw) if isinstance(start_raw, str) else start_raw
+        )
         end = date.fromisoformat(end_raw) if isinstance(end_raw, str) else end_raw
         if check_in < end and check_out > start:
             return True
