@@ -79,7 +79,7 @@ export default function Payouts() {
         <HostKpi icon={IndianRupee} variant="earnings" label="Total paid out" value={formatCurrency(totalPaid)} hint="Completed stays" />
         <HostKpi icon={Wallet} variant="bookings" label="Pending transfer" value={formatCurrency(pendingPayout)} hint="Confirmed & paid" />
         <HostKpi icon={Calendar} variant="occupancy" label="This month" value={formatCurrency(stats?.month_revenue ?? 0)} hint="Host earnings" />
-        <HostKpi icon={Wallet} variant="rating" label="Payout method" value={payoutLabel ? 'Set up' : 'Not set'} hint={payoutLabel || 'Add in settings'} />
+        <HostKpi icon={Wallet} variant="rating" label="Payout method" value={payoutLabel ? 'Active' : 'Not set'} hint={payoutLabel || 'Add in settings'} />
       </HostKpiGrid>
 
       {!payoutLabel && (
