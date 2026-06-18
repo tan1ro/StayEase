@@ -36,12 +36,16 @@ async def lifespan(_: FastAPI):
     await disconnect_db()
 
 
+def _cors_origins() -> list[str]:
+    return [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.ALLOWED_ORIGINS],
+        allow_origins=_cors_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
