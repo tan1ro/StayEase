@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from .common import MongoModel, serialize_doc, utc_now
 from services.roles import normalize_role
 
-
 Role = Literal["tourist", "host", "admin"]
 IdentityType = Literal["aadhar", "pan", "passport"]
 
@@ -133,4 +132,3 @@ class UserInDB(MongoModel):
     date_of_birth: Optional[str] = None
     onboarding_completed: bool = False
     created_at: datetime = Field(default_factory=utc_now)
-

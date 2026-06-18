@@ -58,4 +58,3 @@ class RoomRecommendRequest(BaseModel):
     max_price: float | None = None
     balcony: bool | None = None
     city: str | None = None
-

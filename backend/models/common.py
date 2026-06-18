@@ -50,4 +50,3 @@ def serialize_doc(doc: dict[str, Any] | None) -> dict[str, Any] | None:
             out["_id"] = oid
             out["id"] = oid
     return out
-

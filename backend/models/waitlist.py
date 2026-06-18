@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 from .common import MongoModel, utc_now
 
-
 WaitlistStatus = Literal["waiting", "notify", "expired"]
 
 

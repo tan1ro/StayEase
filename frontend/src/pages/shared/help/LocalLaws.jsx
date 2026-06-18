@@ -35,8 +35,10 @@ const sections = [
       'GST treatment may change under government notification. The rate shown in your listing price preview and at guest checkout is authoritative for each booking.',
     ],
     list: [
-      '₹7,500 per night or below — 5% GST (split equally as CGST and SGST)',
-      'Above ₹7,500 per night — 18% GST (split equally as CGST and SGST)',
+      'Below ₹1,000 per night — 0% GST (exempt)',
+      '₹1,001 to ₹7,500 per night — 5% GST (split equally as CGST and SGST; ITC not allowed)',
+      'Above ₹7,500 per night — 18% GST (split equally as CGST and SGST; ITC allowed for businesses)',
+      'Long-term dormitory stays (90+ nights, up to ₹20,000/month per person) — 0% GST (exempt)',
     ],
   },
   {

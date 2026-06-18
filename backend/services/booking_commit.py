@@ -91,7 +91,9 @@ async def commit_booking(
     }
 
     async def _txn(session) -> dict[str, Any]:
-        conflict = await find_conflicting_booking(room_id, check_in, check_out, session=session)
+        conflict = await find_conflicting_booking(
+            room_id, check_in, check_out, session=session
+        )
         if conflict:
             raise BookingConflictError()
 
@@ -124,7 +126,9 @@ async def commit_booking(
             )
 
         res = await database.collection("bookings").insert_one(doc, session=session)
-        created = await database.collection("bookings").find_one({"_id": res.inserted_id}, session=session)
+        created = await database.collection("bookings").find_one(
+            {"_id": res.inserted_id}, session=session
+        )
         if created is None:
             raise RuntimeError("Booking insert failed")
         return created
@@ -137,9 +141,14 @@ async def commit_booking(
             detail={"message": "Room unavailable for selected dates"},
         ) from None
     except OfferExhaustedError:
-        raise HTTPException(status_code=422, detail={"offer_code": "Offer usage limit reached"}) from None
+        raise HTTPException(
+            status_code=422, detail={"offer_code": "Offer usage limit reached"}
+        ) from None
     except InsufficientReferralCreditsError:
-        raise HTTPException(status_code=422, detail={"referral_credits": "Insufficient referral credits"}) from None
+        raise HTTPException(
+            status_code=422,
+            detail={"referral_credits": "Insufficient referral credits"},
+        ) from None
 
 
 async def commit_bookings_batch(
@@ -168,9 +177,15 @@ async def commit_bookings_batch(
     host_ids = {room.get("host_id") for room in rooms}
     cities = {room.get("location", {}).get("city") for room in rooms}
     if len(host_ids) != 1 or None in host_ids:
-        raise HTTPException(status_code=422, detail={"room_ids": "All rooms must belong to the same host"})
+        raise HTTPException(
+            status_code=422,
+            detail={"room_ids": "All rooms must belong to the same host"},
+        )
     if len(cities) != 1 or not next(iter(cities)):
-        raise HTTPException(status_code=422, detail={"room_ids": "All rooms must be at the same property"})
+        raise HTTPException(
+            status_code=422,
+            detail={"room_ids": "All rooms must be at the same property"},
+        )
 
     group_id = str(uuid4())
     linked_ids = [str(room["_id"]) for room in rooms]
@@ -181,7 +196,10 @@ async def commit_bookings_batch(
         room_id = str(room["_id"])
         pricing = pricing_by_room_id.get(room_id)
         if not pricing:
-            raise HTTPException(status_code=422, detail={"room_ids": f"Missing pricing for room {room_id}"})
+            raise HTTPException(
+                status_code=422,
+                detail={"room_ids": f"Missing pricing for room {room_id}"},
+            )
 
         batch_user = dict(user)
         if index > 0:
@@ -225,9 +243,13 @@ async def commit_payment(
 
     async def _txn(session) -> tuple[dict[str, Any] | None, bool]:
         booking_oid = ObjectId(booking_id)
-        existing = await database.collection("invoices").find_one({"booking_id": booking_id}, session=session)
+        existing = await database.collection("invoices").find_one(
+            {"booking_id": booking_id}, session=session
+        )
         if existing:
-            booking = await database.collection("bookings").find_one({"_id": booking_oid}, session=session)
+            booking = await database.collection("bookings").find_one(
+                {"_id": booking_oid}, session=session
+            )
             return booking, False
 
         result = await database.collection("bookings").update_one(
@@ -236,11 +258,15 @@ async def commit_payment(
             session=session,
         )
         if result.modified_count == 0:
-            booking = await database.collection("bookings").find_one({"_id": booking_oid}, session=session)
+            booking = await database.collection("bookings").find_one(
+                {"_id": booking_oid}, session=session
+            )
             return booking, False
 
         await database.collection("invoices").insert_one(invoice_doc, session=session)
-        booking = await database.collection("bookings").find_one({"_id": booking_oid}, session=session)
+        booking = await database.collection("bookings").find_one(
+            {"_id": booking_oid}, session=session
+        )
         return booking, True
 
     return await database.run_transaction(_txn)
@@ -270,7 +296,9 @@ async def commit_cancellation(
             session=session,
         )
         if not booking:
-            existing = await database.collection("bookings").find_one({"_id": booking_oid}, session=session)
+            existing = await database.collection("bookings").find_one(
+                {"_id": booking_oid}, session=session
+            )
             if existing and existing.get("status") == "cancelled":
                 raise AlreadyCancelledError()
             raise HTTPException(status_code=404, detail="Booking not found")
@@ -308,7 +336,9 @@ async def commit_cancellation(
 
         await promote_waitlist_on_cancel(room_id, check_in, check_out, session=session)
 
-        updated = await database.collection("bookings").find_one({"_id": booking_oid}, session=session)
+        updated = await database.collection("bookings").find_one(
+            {"_id": booking_oid}, session=session
+        )
         if updated is None:
             raise RuntimeError("Cancellation update failed")
         return updated, True
@@ -316,4 +346,6 @@ async def commit_cancellation(
     try:
         return await database.run_transaction(_txn)
     except AlreadyCancelledError:
-        raise HTTPException(status_code=409, detail="Booking already cancelled") from None
+        raise HTTPException(
+            status_code=409, detail="Booking already cancelled"
+        ) from None

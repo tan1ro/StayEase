@@ -39,15 +39,19 @@ async def test_host_profile_includes_reviews(client, guest_token, seed_data, moc
                     "guest_name": "Test Guest",
                     "guest_phone": "9123456789",
                     "guest_email": "guest@test.com",
-                    "check_in_date": (datetime.utcnow().date() - timedelta(days=10)).isoformat(),
-                    "check_out_date": (datetime.utcnow().date() - timedelta(days=8)).isoformat(),
+                    "check_in_date": (
+                        datetime.utcnow().date() - timedelta(days=10)
+                    ).isoformat(),
+                    "check_out_date": (
+                        datetime.utcnow().date() - timedelta(days=8)
+                    ).isoformat(),
                     "total_nights": 2,
                     "num_guests": 1,
                     "base_price": 3500.0,
                     "final_price_per_night": 3500.0,
                     "price_breakdown": [],
                     "subtotal": 7000.0,
-                    "gst_rate": 0.12,
+                    "gst_rate": 0.05,
                     "gst_amount": 840.0,
                     "total_price": 7840.0,
                     "offer_code": None,
@@ -79,6 +83,8 @@ async def test_host_profile_includes_reviews(client, guest_token, seed_data, moc
     assert body["stats"]["total_reviews"] >= 1
     assert any(item["room_id"] == room_id for item in body["reviews_by_listing"])
     listing = next(item for item in body["listings"] if item["_id"] == room_id)
-    grouped = next(item for item in body["reviews_by_listing"] if item["room_id"] == room_id)
+    grouped = next(
+        item for item in body["reviews_by_listing"] if item["room_id"] == room_id
+    )
     assert listing["total_reviews"] == grouped["total_reviews"]
     assert listing["avg_rating"] == grouped["avg_rating"]

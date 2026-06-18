@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react';
 import GSTBreakdown, { calculateGST } from '../../components/GSTBreakdown';
 
 describe('calculateGST', () => {
-  it('5% GST for price up to 7500', () => {
+  it('0% GST for price below 1000', () => {
     const gst = calculateGST(800, 2);
-    expect(gst.gst_rate).toBe(0.05);
-    expect(gst.total_gst).toBe(80);
+    expect(gst.gst_rate).toBe(0);
+    expect(gst.total_gst).toBe(0);
   });
 
   it('5% GST for price 1000-7500', () => {
@@ -19,6 +19,12 @@ describe('calculateGST', () => {
     const gst = calculateGST(8000, 1);
     expect(gst.gst_rate).toBe(0.18);
     expect(gst.total_gst).toBe(1440);
+  });
+
+  it('0% GST for long-term dormitory stays', () => {
+    const gst = calculateGST(500, 90, { roomCategory: 'Dormitory' });
+    expect(gst.gst_rate).toBe(0);
+    expect(gst.total_gst).toBe(0);
   });
 
   it('CGST and SGST split correctly', () => {

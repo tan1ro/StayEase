@@ -51,5 +51,9 @@ async def get_wishlist(user: dict = Depends(get_current_user)):
     if not wishlist_ids:
         return []
     object_ids = [ObjectId(rid) for rid in wishlist_ids if ObjectId.is_valid(rid)]
-    rooms = await database.collection("rooms").find({"_id": {"$in": object_ids}}).to_list(100)
+    rooms = (
+        await database.collection("rooms")
+        .find({"_id": {"$in": object_ids}})
+        .to_list(100)
+    )
     return [serialize_doc(r) for r in rooms]

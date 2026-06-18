@@ -135,7 +135,7 @@ async def test_cancel_paid_booking_partial_refund(client, guest_token, seed_data
             "final_price_per_night": 1200.0,
             "price_breakdown": [],
             "subtotal": 2400.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 288.0,
             "total_price": 2688.0,
             "payment_status": "paid",

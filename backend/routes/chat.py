@@ -15,7 +15,6 @@ from services.auth import bearer_scheme
 from services.chatbot import resolve_chat_intent, serialize_reply
 from services.roles import normalize_role
 
-
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 MAX_MESSAGES = 100
@@ -47,7 +46,9 @@ async def _optional_user(
     if creds is None or not creds.credentials:
         return None
     try:
-        payload = jwt.decode(creds.credentials, settings.JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(
+            creds.credentials, settings.JWT_SECRET, algorithms=["HS256"]
+        )
         sub = payload.get("sub")
         if not sub:
             return None
@@ -61,7 +62,9 @@ async def _optional_user(
     return user
 
 
-async def _build_context(user: dict[str, Any] | None, current_path: str | None) -> dict[str, Any]:
+async def _build_context(
+    user: dict[str, Any] | None, current_path: str | None
+) -> dict[str, Any]:
     context: dict[str, Any] = {
         "current_path": current_path or "/",
         "is_authenticated": user is not None,
@@ -83,7 +86,9 @@ async def _build_context(user: dict[str, Any] | None, current_path: str | None) 
     return context
 
 
-async def _get_or_create_session(session_id: str | None, user: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
+async def _get_or_create_session(
+    session_id: str | None, user: dict[str, Any] | None
+) -> tuple[str, dict[str, Any]]:
     sessions = database.collection("chat_sessions")
     user_id = str(user["_id"]) if user else None
 
@@ -115,7 +120,9 @@ async def _get_or_create_session(session_id: str | None, user: dict[str, Any] | 
     return new_session_id, doc
 
 
-def _append_message(session: dict[str, Any], role: str, content: str) -> list[dict[str, Any]]:
+def _append_message(
+    session: dict[str, Any], role: str, content: str
+) -> list[dict[str, Any]]:
     messages = list(session.get("messages") or [])
     messages.append({"role": role, "content": content, "at": utc_now().isoformat()})
     if len(messages) > MAX_MESSAGES:
@@ -138,7 +145,9 @@ async def send_chat_message(
     bot_data = serialize_reply(bot)
 
     messages = _append_message(session, "user", message)
-    messages = messages + [{"role": "assistant", "content": bot.reply, "at": utc_now().isoformat()}]
+    messages = messages + [
+        {"role": "assistant", "content": bot.reply, "at": utc_now().isoformat()}
+    ]
 
     await database.collection("chat_sessions").update_one(
         {"session_id": session_id},

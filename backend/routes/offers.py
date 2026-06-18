@@ -25,7 +25,9 @@ async def create_offer(
     offers = db["offers"]
     existing = await offers.find_one({"code": payload.code.upper()})
     if existing:
-        raise HTTPException(status_code=422, detail={"code": "Offer code already exists"})
+        raise HTTPException(
+            status_code=422, detail={"code": "Offer code already exists"}
+        )
     doc = {
         "host_id": str(user["_id"]) if user["role"] == "host" else None,
         "code": payload.code.upper(),
@@ -44,7 +46,9 @@ async def create_offer(
     try:
         res = await offers.insert_one(doc)
     except DuplicateKeyError as exc:
-        raise HTTPException(status_code=422, detail={"code": "Offer code already exists"}) from exc
+        raise HTTPException(
+            status_code=422, detail={"code": "Offer code already exists"}
+        ) from exc
     created = await offers.find_one({"_id": res.inserted_id})
     return serialize_doc(created)
 
@@ -109,14 +113,20 @@ async def validate_offer(
     payload: ValidateOfferRequest,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    offer = await db["offers"].find_one({"code": payload.code.upper(), "is_active": True})
+    offer = await db["offers"].find_one(
+        {"code": payload.code.upper(), "is_active": True}
+    )
     if not offer:
         raise HTTPException(status_code=422, detail={"code": "Invalid offer code"})
     today = date.today().isoformat()
     if offer["valid_from"] > today or offer["valid_until"] < today:
         raise HTTPException(status_code=422, detail={"code": "Offer expired"})
     if offer["used_count"] >= offer["usage_limit"]:
-        raise HTTPException(status_code=422, detail={"code": "Offer usage limit reached"})
+        raise HTTPException(
+            status_code=422, detail={"code": "Offer usage limit reached"}
+        )
     if payload.amount < offer.get("min_booking_amount", 0):
-        raise HTTPException(status_code=422, detail={"amount": "Minimum booking amount not met"})
+        raise HTTPException(
+            status_code=422, detail={"amount": "Minimum booking amount not met"}
+        )
     return {"valid": True, "offer": serialize_doc(offer)}

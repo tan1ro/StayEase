@@ -36,14 +36,22 @@ def _enrich_review(review: dict, rooms_by_id: dict[str, dict]) -> dict:
     return doc
 
 
-async def _eligible_booking_for_property(*, guest_id: str, room: dict, db: AsyncIOMotorDatabase) -> dict:
+async def _eligible_booking_for_property(
+    *, guest_id: str, room: dict, db: AsyncIOMotorDatabase
+) -> dict:
     property_name = property_name_from_room(room)
     room_ids = await get_property_room_ids(room, database=db)
     rooms_by_id = await _room_map(db, room_ids)
 
     bookings = (
         await db["bookings"]
-        .find({"guest_id": guest_id, "room_id": {"$in": room_ids}, "status": {"$ne": "cancelled"}})
+        .find(
+            {
+                "guest_id": guest_id,
+                "room_id": {"$in": room_ids},
+                "status": {"$ne": "cancelled"},
+            }
+        )
         .sort("check_out_date", -1)
         .to_list(50)
     )
@@ -101,7 +109,9 @@ async def _eligible_booking_for_property(*, guest_id: str, room: dict, db: Async
             }
 
     if reviewed_ids:
-        latest_reviewed = next((b for b in bookings if str(b["_id"]) in reviewed_ids), bookings[0])
+        latest_reviewed = next(
+            (b for b in bookings if str(b["_id"]) in reviewed_ids), bookings[0]
+        )
         serialized = serialize_doc(latest_reviewed)
         stayed_room = rooms_by_id.get(latest_reviewed["room_id"], {})
         serialized["room_title"] = stayed_room.get("title", "")
@@ -137,7 +147,9 @@ async def create_review(
     if booking["guest_id"] != str(user["_id"]) and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
     if not is_booking_reviewable(booking):
-        raise HTTPException(status_code=422, detail="Can only review stays after checkout")
+        raise HTTPException(
+            status_code=422, detail="Can only review stays after checkout"
+        )
 
     existing = await db["reviews"].find_one({"booking_id": payload.booking_id})
     if existing:
@@ -161,7 +173,9 @@ async def create_review(
         try:
             res = await db["reviews"].insert_one(doc, session=session)
         except DuplicateKeyError as exc:
-            raise HTTPException(status_code=409, detail="Review already submitted") from exc
+            raise HTTPException(
+                status_code=409, detail="Review already submitted"
+            ) from exc
         await sync_room_review_stats(booking["room_id"], session=session)
         return res.inserted_id
 
@@ -187,7 +201,9 @@ async def get_eligible_review_for_room(
     room = await db["rooms"].find_one({"_id": ObjectId(room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    return await _eligible_booking_for_property(guest_id=str(user["_id"]), room=room, db=db)
+    return await _eligible_booking_for_property(
+        guest_id=str(user["_id"]), room=room, db=db
+    )
 
 
 @router.get("/property/{room_id}")
@@ -211,7 +227,9 @@ async def get_property_reviews(
     )
     rooms_by_id = await _room_map(db, room_ids)
     reviews = [_enrich_review(item, rooms_by_id) for item in items]
-    avg_rating = round(sum(r["rating"] for r in reviews) / len(reviews), 2) if reviews else 0.0
+    avg_rating = (
+        round(sum(r["rating"] for r in reviews) / len(reviews), 2) if reviews else 0.0
+    )
 
     return {
         "property_name": property_name,

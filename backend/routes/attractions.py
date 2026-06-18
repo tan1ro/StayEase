@@ -24,10 +24,7 @@ async def get_attractions(city: str):
 @router.get("/weather/{lat}/{lon}")
 async def get_weather(lat: float, lon: float):
     base = settings.OPEN_METEO_BASE_URL.rstrip("/")
-    url = (
-        f"{base}/v1/forecast"
-        f"?latitude={lat}&longitude={lon}&current_weather=true"
-    )
+    url = f"{base}/v1/forecast" f"?latitude={lat}&longitude={lon}&current_weather=true"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url)
@@ -35,7 +32,11 @@ async def get_weather(lat: float, lon: float):
             payload = resp.json()
             current = payload.get("current_weather")
             if not current:
-                raise HTTPException(status_code=502, detail="Weather service unavailable")
+                raise HTTPException(
+                    status_code=502, detail="Weather service unavailable"
+                )
             return current
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail="Weather service unavailable") from e
+        raise HTTPException(
+            status_code=502, detail="Weather service unavailable"
+        ) from e

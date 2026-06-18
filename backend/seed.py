@@ -164,7 +164,9 @@ async def _ensure_user(users, *, email: str, doc: dict) -> tuple[dict, bool]:
 
 
 async def _ensure_room(rooms, *, host_id: str, spec: dict) -> tuple[str, bool]:
-    existing = await rooms.find_one({"host_id": host_id, "room_number": spec["room_number"]})
+    existing = await rooms.find_one(
+        {"host_id": host_id, "room_number": spec["room_number"]}
+    )
     if existing:
         print(f"SKIP room {spec['room_number']} — {spec['title']} (already exists)")
         return str(existing["_id"]), False
@@ -307,7 +309,9 @@ async def seed() -> None:
                 "num_guests": 1,
                 "base_price": 850.0,
                 "final_price_per_night": 850.0,
-                "price_breakdown": [{"label": "Base price", "amount": 2550.0, "type": "base"}],
+                "price_breakdown": [
+                    {"label": "Base price", "amount": 2550.0, "type": "base"}
+                ],
                 "subtotal": 2550.0,
                 "gst_rate": 0.12,
                 "gst_amount": 306.0,
@@ -341,7 +345,9 @@ async def seed() -> None:
                 "num_guests": 2,
                 "base_price": 750.0,
                 "final_price_per_night": 750.0,
-                "price_breakdown": [{"label": "Base price", "amount": 1500.0, "type": "base"}],
+                "price_breakdown": [
+                    {"label": "Base price", "amount": 1500.0, "type": "base"}
+                ],
                 "subtotal": 1500.0,
                 "gst_rate": 0.12,
                 "gst_amount": 180.0,

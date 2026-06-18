@@ -42,7 +42,9 @@ class TestEmailRequest(BaseModel):
 
 
 @router.post("/test-email")
-async def test_email(payload: TestEmailRequest | None = None, user: dict = Depends(get_current_user)):
+async def test_email(
+    payload: TestEmailRequest | None = None, user: dict = Depends(get_current_user)
+):
     to = (payload.to if payload and payload.to else None) or user["email"]
     sent = await send_template_email(
         to=to,
@@ -63,5 +65,7 @@ async def test_email(payload: TestEmailRequest | None = None, user: dict = Depen
         "read": False,
     }
     res = await database.collection("notifications").insert_one(doc)
-    created = await database.collection("notifications").find_one({"_id": res.inserted_id})
+    created = await database.collection("notifications").find_one(
+        {"_id": res.inserted_id}
+    )
     return {"message": "Test email sent", "notification": serialize_doc(created)}

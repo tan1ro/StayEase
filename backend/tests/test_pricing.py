@@ -5,7 +5,7 @@ from services.pricing import calculate_dynamic_pricing
 
 
 def test_weekend_surcharge_applied():
-  # 2025-06-13 is Friday, 2025-06-15 is Sunday -> includes Fri+Sat
+    # 2025-06-13 is Friday, 2025-06-15 is Sunday -> includes Fri+Sat
     result = calculate_dynamic_pricing(
         base_price=1000.0,
         check_in=date(2025, 6, 13),
@@ -63,12 +63,37 @@ def test_gst_rate_below_1000():
 
 def test_gst_rate_1000_to_7500():
     gst = calculate_gst(3500.0, 2)
-    assert gst["gst_rate"] == 0.12
+    assert gst["gst_rate"] == 0.05
 
 
 def test_gst_rate_above_7500():
     gst = calculate_gst(8500.0, 1)
     assert gst["gst_rate"] == 0.18
+    assert gst["itc_allowed"] is True
+
+
+def test_gst_rate_standard_itc_not_allowed():
+    gst = calculate_gst(3500.0, 2)
+    assert gst["itc_allowed"] is False
+    assert gst["gst_slab"] == "standard"
+
+
+def test_gst_long_term_dormitory_exempt():
+    gst = calculate_gst(500.0, 90, room_category="Dormitory")
+    assert gst["gst_rate"] == 0.0
+    assert gst["gst_slab"] == "long_term_rental"
+
+
+def test_gst_long_term_dormitory_not_exempt_below_90_nights():
+    gst = calculate_gst(500.0, 89, room_category="Dormitory")
+    assert gst["gst_rate"] == 0.0
+    assert gst["gst_slab"] == "budget"
+
+
+def test_gst_long_term_dormitory_not_exempt_above_monthly_cap():
+    gst = calculate_gst(700.0, 90, room_category="Dormitory")
+    assert gst["gst_rate"] == 0.0
+    assert gst["gst_slab"] == "budget"
 
 
 def test_offer_code_discount_applied():
@@ -90,8 +115,12 @@ def test_platform_fees_applied():
     )
     assert result["guest_platform_fee"] == round(result["subtotal"] * 0.10, 2)
     assert result["host_platform_fee"] == round(result["subtotal"] * 0.03, 2)
-    assert result["host_payout"] == round(result["subtotal"] - result["host_platform_fee"], 2)
-    assert result["total_price"] == round(result["subtotal"] + result["gst_amount"] + result["guest_platform_fee"], 2)
+    assert result["host_payout"] == round(
+        result["subtotal"] - result["host_platform_fee"], 2
+    )
+    assert result["total_price"] == round(
+        result["subtotal"] + result["gst_amount"] + result["guest_platform_fee"], 2
+    )
     fee_labels = [i["label"] for i in result["price_breakdown"] if i["type"] == "fee"]
     assert "StayEase service fee" in fee_labels
 

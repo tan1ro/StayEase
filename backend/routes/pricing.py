@@ -26,7 +26,9 @@ async def calculate_price(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     if payload.check_out <= payload.check_in:
-        raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
+        raise HTTPException(
+            status_code=422, detail={"check_out": "Check-out must be after check-in"}
+        )
     if not ObjectId.is_valid(payload.room_id):
         raise HTTPException(status_code=404, detail="Room not found")
     room = await db["rooms"].find_one({"_id": ObjectId(payload.room_id)})
@@ -39,7 +41,9 @@ async def calculate_price(
             {"code": payload.offer_code.upper(), "is_active": True}
         )
         if not offer:
-            raise HTTPException(status_code=422, detail={"offer_code": "Invalid offer code"})
+            raise HTTPException(
+                status_code=422, detail={"offer_code": "Invalid offer code"}
+            )
         today = date.today().isoformat()
         if offer["valid_from"] > today or offer["valid_until"] < today:
             raise HTTPException(status_code=422, detail={"offer_code": "Offer expired"})
@@ -49,4 +53,7 @@ async def calculate_price(
         check_in=payload.check_in,
         check_out=payload.check_out,
         offer=offer,
+        view_type=room.get("view_type"),
+        facing_side=room.get("facing_side"),
+        room_category=room.get("room_category"),
     )

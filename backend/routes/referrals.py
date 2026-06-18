@@ -21,7 +21,9 @@ async def my_referral_code(user: dict = Depends(get_current_user)):
 @router.get("/stats")
 async def referral_stats(user: dict = Depends(get_current_user)):
     user_id = str(user["_id"])
-    referred = await database.collection("users").find({"referred_by": user_id}).to_list(500)
+    referred = (
+        await database.collection("users").find({"referred_by": user_id}).to_list(500)
+    )
     credits_earned = len(referred) * 200.0
     return {
         "total_referred": len(referred),

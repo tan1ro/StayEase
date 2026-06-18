@@ -63,7 +63,10 @@ async def test_register_weak_password_fails(client):
 async def test_login_success_returns_token(client, seed_data):
     res = await client.post(
         "/api/auth/login",
-        json={"email": seed_data["guest_email"], "password": seed_data["guest_password"]},
+        json={
+            "email": seed_data["guest_email"],
+            "password": seed_data["guest_password"],
+        },
     )
     assert res.status_code == 200
     assert "access_token" in res.json()

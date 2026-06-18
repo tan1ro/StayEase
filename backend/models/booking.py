@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field, field_validator
 from .common import MongoModel, utc_now
 from .user import IdentityProof
 
-
 PaymentStatus = Literal["pending", "paid", "refunded"]
 BookingStatus = Literal["confirmed", "cancelled", "completed"]
 BookingFor = Literal["self", "other"]

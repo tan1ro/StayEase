@@ -14,7 +14,6 @@ from config import settings
 from database import database
 from models.common import PyObjectId
 
-
 bearer_scheme = HTTPBearer(auto_error=False)
 
 from services.roles import Role, normalize_role
@@ -42,7 +41,11 @@ def _utc_now() -> datetime:
 
 def create_access_token(*, subject: str, role: str) -> str:
     expire = _utc_now() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    payload: dict[str, Any] = {"sub": subject, "role": normalize_role(role), "exp": expire}
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "role": normalize_role(role),
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
@@ -65,21 +68,29 @@ async def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> dict[str, Any]:
     if creds is None or not creds.credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
 
     token = creds.credentials
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
         sub = payload.get("sub")
         if not sub:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
     except JWTError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from e
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from e
 
     users = database.collection("users")
     user = await users.find_one({"_id": PyObjectId(sub)})
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user
 
 
@@ -89,8 +100,9 @@ def require_role(*allowed: Role):
     async def _dep(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
         role = normalize_role(user.get("role"))
         if role not in allowed_normalized:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden"
+            )
         return user
 
     return _dep
-

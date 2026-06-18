@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 ActionType = Literal["navigate", "external"]
 
 
@@ -75,7 +74,9 @@ def _greeting_reply(context: dict[str, Any]) -> ChatbotReply:
     )
 
 
-def _navigation_reply(label: str, path: str, message: str, context: dict[str, Any]) -> ChatbotReply:
+def _navigation_reply(
+    label: str, path: str, message: str, context: dict[str, Any]
+) -> ChatbotReply:
     return ChatbotReply(
         reply=message,
         actions=[ChatAction(f"Go to {label}", path)],
@@ -83,7 +84,9 @@ def _navigation_reply(label: str, path: str, message: str, context: dict[str, An
     )
 
 
-def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> ChatbotReply:
+def resolve_chat_intent(
+    message: str, context: dict[str, Any] | None = None
+) -> ChatbotReply:
     context = context or {}
     text = _normalize(message)
     if not text:
@@ -94,7 +97,9 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
 
     # Exact quick-reply matches
     quick_map = {
-        "browse stays": _navigation_reply("home", "/", "Taking you to explore stays across India.", context),
+        "browse stays": _navigation_reply(
+            "home", "/", "Taking you to explore stays across India.", context
+        ),
         "find my room": _navigation_reply(
             "Find My Room",
             "/find-my-room",
@@ -188,7 +193,9 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
     if text in quick_map:
         return quick_map[text]
 
-    if _contains_any(text, "hi", "hello", "hey", "good morning", "good evening", "namaste"):
+    if _contains_any(
+        text, "hi", "hello", "hey", "good morning", "good evening", "namaste"
+    ):
         return _greeting_reply(context)
 
     if _contains_any(text, "thank", "thanks", "thx"):
@@ -208,11 +215,18 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
         if not context.get("is_authenticated"):
             return ChatbotReply(
                 reply="Sign in to view your bookings, download receipts, and manage cancellations.",
-                actions=[ChatAction("Sign in", "/login"), ChatAction("Create account", "/register")],
+                actions=[
+                    ChatAction("Sign in", "/login"),
+                    ChatAction("Create account", "/register"),
+                ],
                 quick_replies=["Browse stays", "Help centre"],
             )
         booking_count = context.get("booking_count", 0)
-        suffix = f" You have {booking_count} booking{'s' if booking_count != 1 else ''} on your account." if booking_count else ""
+        suffix = (
+            f" You have {booking_count} booking{'s' if booking_count != 1 else ''} on your account."
+            if booking_count
+            else ""
+        )
         return _navigation_reply(
             "bookings",
             "/bookings",
@@ -228,7 +242,9 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 actions=[ChatAction("Sign in", "/login")],
                 quick_replies=["Browse stays", "Create account"],
             )
-        return _navigation_reply("wishlist", path, "Your saved stays live in Wishlist.", context)
+        return _navigation_reply(
+            "wishlist", path, "Your saved stays live in Wishlist.", context
+        )
 
     if _contains_any(text, "message", "inbox", "chat with host", "contact host"):
         path = "/host/messages" if context.get("is_host") else "/messages"
@@ -239,12 +255,18 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 quick_replies=["Browse stays", "Help centre"],
             )
         label = "host messages" if context.get("is_host") else "messages"
-        return _navigation_reply(label, path, "Open Messages to view inquiries and replies.", context)
+        return _navigation_reply(
+            label, path, "Open Messages to view inquiries and replies.", context
+        )
 
     if _contains_any(text, "profile", "my account", "account"):
         if not context.get("is_authenticated"):
-            return _navigation_reply("login", "/login", "Sign in to access your StayEase profile.", context)
-        return _navigation_reply("profile", "/settings", "View and edit your profile details here.", context)
+            return _navigation_reply(
+                "login", "/login", "Sign in to access your StayEase profile.", context
+            )
+        return _navigation_reply(
+            "profile", "/settings", "View and edit your profile details here.", context
+        )
 
     if _contains_any(text, "setting", "password", "notification pref"):
         if not context.get("is_authenticated"):
@@ -253,9 +275,16 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 actions=[ChatAction("Sign in", "/login")],
                 quick_replies=["Forgot password", "Create account"],
             )
-        return _navigation_reply("settings", "/settings", "Manage password, phone, and preferences in Settings.", context)
+        return _navigation_reply(
+            "settings",
+            "/settings",
+            "Manage password, phone, and preferences in Settings.",
+            context,
+        )
 
-    if _contains_any(text, "forgot password", "reset password", "can't login", "cannot login"):
+    if _contains_any(
+        text, "forgot password", "reset password", "can't login", "cannot login"
+    ):
         return _navigation_reply(
             "forgot password",
             "/forgot-password",
@@ -264,12 +293,30 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
         )
 
     if _contains_any(text, "login", "log in", "sign in", "signin"):
-        return _navigation_reply("login", "/login", "Head to Sign in with your email and password.", context)
+        return _navigation_reply(
+            "login", "/login", "Head to Sign in with your email and password.", context
+        )
 
-    if _contains_any(text, "register", "sign up", "signup", "create account", "new account"):
-        return _navigation_reply("register", "/register", "Create a StayEase account to book and message hosts.", context)
+    if _contains_any(
+        text, "register", "sign up", "signup", "create account", "new account"
+    ):
+        return _navigation_reply(
+            "register",
+            "/register",
+            "Create a StayEase account to book and message hosts.",
+            context,
+        )
 
-    if _contains_any(text, "search", "explore", "find stay", "find room", "browse", "hotel", "homestay"):
+    if _contains_any(
+        text,
+        "search",
+        "explore",
+        "find stay",
+        "find room",
+        "browse",
+        "hotel",
+        "homestay",
+    ):
         if _contains_any(text, "confirmation", "booking id", "reservation number"):
             return _navigation_reply(
                 "Find My Room",
@@ -277,19 +324,51 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 "Use Find My Room with your booking reference to locate your property.",
                 context,
             )
-        return _navigation_reply("home", "/", "Explore stays by city, dates, and guests on the home page.", context)
+        return _navigation_reply(
+            "home",
+            "/",
+            "Explore stays by city, dates, and guests on the home page.",
+            context,
+        )
 
-    if _contains_any(text, "host", "listing", "list my", "list your", "publish", "earn"):
+    if _contains_any(
+        text, "host", "listing", "list my", "list your", "publish", "earn"
+    ):
         if context.get("is_host"):
             if _contains_any(text, "dashboard", "earning", "insight", "analytics"):
-                return _navigation_reply("host dashboard", "/host", "Your host dashboard shows performance and earnings.", context)
+                return _navigation_reply(
+                    "host dashboard",
+                    "/host",
+                    "Your host dashboard shows performance and earnings.",
+                    context,
+                )
             if _contains_any(text, "calendar", "availability"):
-                return _navigation_reply("calendar", "/host/calendar", "Manage availability and blocked dates on your calendar.", context)
+                return _navigation_reply(
+                    "calendar",
+                    "/host/calendar",
+                    "Manage availability and blocked dates on your calendar.",
+                    context,
+                )
             if _contains_any(text, "payout", "payment", "withdraw"):
-                return _navigation_reply("payouts", "/host/payouts", "Track payouts and settlement details here.", context)
+                return _navigation_reply(
+                    "payouts",
+                    "/host/payouts",
+                    "Track payouts and settlement details here.",
+                    context,
+                )
             if _contains_any(text, "offer", "discount", "promo"):
-                return _navigation_reply("offers", "/host/offers", "Create and manage promotional offers for your listings.", context)
-            return _navigation_reply("listings", "/host/rooms", "Manage your listings from the host rooms page.", context)
+                return _navigation_reply(
+                    "offers",
+                    "/host/offers",
+                    "Create and manage promotional offers for your listings.",
+                    context,
+                )
+            return _navigation_reply(
+                "listings",
+                "/host/rooms",
+                "Manage your listings from the host rooms page.",
+                context,
+            )
         return _navigation_reply(
             "list your room",
             "/host/rooms/add",
@@ -332,13 +411,24 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
         )
 
     if _contains_any(text, "privacy", "data", "cookie"):
-        path = "/privacy-policy" if "privacy" in text or "data" in text else "/cookie-policy"
+        path = (
+            "/privacy-policy"
+            if "privacy" in text or "data" in text
+            else "/cookie-policy"
+        )
         label = "privacy policy" if path == "/privacy-policy" else "cookie policy"
-        return _navigation_reply(label, path, f"Read our {label.replace('-', ' ')} for details.", context)
+        return _navigation_reply(
+            label, path, f"Read our {label.replace('-', ' ')} for details.", context
+        )
 
     if _contains_any(text, "term", "policy", "rule", "law"):
         if _contains_any(text, "local"):
-            return _navigation_reply("local laws", "/help/local-laws", "Local hosting laws vary by state and city.", context)
+            return _navigation_reply(
+                "local laws",
+                "/help/local-laws",
+                "Local hosting laws vary by state and city.",
+                context,
+            )
         if _contains_any(text, "discrim"):
             return _navigation_reply(
                 "nondiscrimination",
@@ -346,7 +436,12 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 "Our nondiscrimination policy explains inclusive hosting standards.",
                 context,
             )
-        return _navigation_reply("terms", "/terms", "Terms of Service cover guest and host responsibilities.", context)
+        return _navigation_reply(
+            "terms",
+            "/terms",
+            "Terms of Service cover guest and host responsibilities.",
+            context,
+        )
 
     if _contains_any(text, "notification", "alert"):
         if not context.get("is_authenticated"):
@@ -355,7 +450,12 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
                 actions=[ChatAction("Sign in", "/login")],
                 quick_replies=["Browse stays"],
             )
-        return _navigation_reply("notifications", "/notifications", "See booking and account alerts in Notifications.", context)
+        return _navigation_reply(
+            "notifications",
+            "/notifications",
+            "See booking and account alerts in Notifications.",
+            context,
+        )
 
     if _contains_any(text, "where am i", "current page", "this page"):
         current_path = context.get("current_path") or "/"

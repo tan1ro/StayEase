@@ -14,4 +14,6 @@ def is_booking_reviewable(booking: dict) -> bool:
         return False
     if booking.get("status") == "completed":
         return True
-    return booking.get("status") == "confirmed" and booking.get("payment_status") == "paid"
+    return (
+        booking.get("status") == "confirmed" and booking.get("payment_status") == "paid"
+    )

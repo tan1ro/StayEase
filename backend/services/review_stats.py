@@ -5,7 +5,9 @@ from bson import ObjectId
 from database import database
 
 
-async def sync_room_review_stats(room_id: str, *, session=None) -> dict[str, float | int]:
+async def sync_room_review_stats(
+    room_id: str, *, session=None
+) -> dict[str, float | int]:
     reviews = (
         await database.collection("reviews")
         .find({"room_id": room_id}, session=session)
@@ -49,8 +51,12 @@ def aggregate_reviews_by_room(
 
     result: dict[str, dict] = {}
     for room_id, room_reviews in grouped.items():
-        avg_rating = round(sum(r["rating"] for r in room_reviews) / len(room_reviews), 2)
-        ordered = sorted(room_reviews, key=lambda r: r.get("created_at") or "", reverse=True)
+        avg_rating = round(
+            sum(r["rating"] for r in room_reviews) / len(room_reviews), 2
+        )
+        ordered = sorted(
+            room_reviews, key=lambda r: r.get("created_at") or "", reverse=True
+        )
         if reviews_per_room is not None:
             ordered = ordered[:reviews_per_room]
         result[room_id] = {

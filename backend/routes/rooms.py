@@ -30,7 +30,6 @@ from services.transactions import (
     commit_set_primary_photo,
 )
 
-
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
 MAX_PHOTOS = 10
@@ -57,7 +56,9 @@ async def _get_room_or_404(
         raise HTTPException(status_code=404, detail="Room not found")
     if require_owner and user:
         if user["role"] != "admin" and room.get("host_id") != str(user["_id"]):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden"
+            )
     return room
 
 
@@ -97,7 +98,9 @@ async def get_rooms_by_host(
     host_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    items = await db["rooms"].find({"host_id": host_id}).sort("created_at", -1).to_list(200)
+    items = (
+        await db["rooms"].find({"host_id": host_id}).sort("created_at", -1).to_list(200)
+    )
     return [serialize_doc(i) for i in items if i.get("_id") is not None]
 
 
@@ -176,7 +179,9 @@ async def list_rooms(
         ]
 
     if check_in and check_out and check_out <= check_in:
-        raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
+        raise HTTPException(
+            status_code=422, detail={"check_out": "Check-out must be after check-in"}
+        )
 
     cursor = rooms.find(q)
 
@@ -198,8 +203,12 @@ async def list_rooms(
     if check_in and check_out:
         filtered = []
         for room in items:
-            conflict = await find_conflicting_booking(str(room["_id"]), check_in, check_out)
-            blocked = blocked_dates_conflict(room.get("blocked_dates"), check_in, check_out)
+            conflict = await find_conflicting_booking(
+                str(room["_id"]), check_in, check_out
+            )
+            blocked = blocked_dates_conflict(
+                room.get("blocked_dates"), check_in, check_out
+            )
             if not conflict and not blocked:
                 filtered.append(room)
         items = filtered
@@ -223,7 +232,11 @@ async def get_room(
                 "name": host["name"],
                 "about_me": host.get("about_me"),
                 "avatar_url": host.get("avatar_url"),
-                "created_at": host.get("created_at").isoformat() if host.get("created_at") else None,
+                "created_at": (
+                    host.get("created_at").isoformat()
+                    if host.get("created_at")
+                    else None
+                ),
             }
     return room_doc
 
@@ -234,12 +247,16 @@ async def get_booked_dates(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     await _get_room_or_404(id, db)
-    items = await db["bookings"].find(
-        {
-            "room_id": id,
-            "status": {"$in": ["confirmed", "completed"]},
-        }
-    ).to_list(500)
+    items = (
+        await db["bookings"]
+        .find(
+            {
+                "room_id": id,
+                "status": {"$in": ["confirmed", "completed"]},
+            }
+        )
+        .to_list(500)
+    )
     return [
         {
             "check_in_date": item.get("check_in_date"),
@@ -264,7 +281,9 @@ async def get_room_alternatives(
         return []
 
     if check_in and check_out and check_out <= check_in:
-        raise HTTPException(status_code=422, detail={"check_out": "Check-out must be after check-in"})
+        raise HTTPException(
+            status_code=422, detail={"check_out": "Check-out must be after check-in"}
+        )
 
     q: dict = {
         "host_id": host_id,
@@ -277,10 +296,14 @@ async def get_room_alternatives(
     for sibling in siblings:
         available = True
         if check_in and check_out:
-            if blocked_dates_conflict(sibling.get("blocked_dates"), check_in, check_out):
+            if blocked_dates_conflict(
+                sibling.get("blocked_dates"), check_in, check_out
+            ):
                 available = False
             else:
-                conflict = await find_conflicting_booking(str(sibling["_id"]), check_in, check_out)
+                conflict = await find_conflicting_booking(
+                    str(sibling["_id"]), check_in, check_out
+                )
                 if conflict:
                     available = False
         doc = serialize_doc(sibling)
@@ -409,7 +432,11 @@ async def add_photo(
     room = await _get_room_or_404(id, db, user, require_owner=True)
 
     uploaded = await upload_image(file)
-    photo = {"url": uploaded["url"], "public_id": uploaded["public_id"], "is_primary": len(room.get("photos", [])) == 0}
+    photo = {
+        "url": uploaded["url"],
+        "public_id": uploaded["public_id"],
+        "is_primary": len(room.get("photos", [])) == 0,
+    }
     return await commit_add_photo(id, photo, max_photos=MAX_PHOTOS)
 
 

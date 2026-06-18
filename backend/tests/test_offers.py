@@ -2,7 +2,6 @@ from datetime import date, timedelta
 
 from models.common import utc_now
 
-
 OFFER_PAYLOAD = {
     "code": "NEWCODE10",
     "type": "percentage",

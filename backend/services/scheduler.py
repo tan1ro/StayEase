@@ -36,7 +36,9 @@ async def _process_reminders() -> None:
     now = datetime.utcnow().date()
     for days, date_field, template, send_wa, flag_key in REMINDER_WINDOWS:
         target = (now + timedelta(days=days)).isoformat()
-        cursor = bookings.find({date_field: target, "status": {"$in": ["confirmed", "completed"]}})
+        cursor = bookings.find(
+            {date_field: target, "status": {"$in": ["confirmed", "completed"]}}
+        )
         async for booking in cursor:
             result = await bookings.update_one(
                 {"_id": booking["_id"], f"reminder_flags.{flag_key}": {"$ne": True}},

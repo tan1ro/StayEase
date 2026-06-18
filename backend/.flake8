@@ -1,0 +1,4 @@
+[flake8]
+max-line-length = 100
+exclude = tests,backend/tests,venv,.venv,__pycache__
+extend-ignore = E501,F401,F841,E402

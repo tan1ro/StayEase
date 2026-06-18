@@ -118,7 +118,13 @@ async def seed_data(mock_db):
             "amenities": ["WiFi", "AC"],
             "is_available": True,
             "max_guests": 2,
-            "location": {"city": "Bangalore", "area": "Koramangala", "lat": 12.9, "lng": 77.6, "address": "Test"},
+            "location": {
+                "city": "Bangalore",
+                "area": "Koramangala",
+                "lat": 12.9,
+                "lng": 77.6,
+                "address": "Test",
+            },
             "photos": [],
             "videos": [],
             "avg_rating": 0.0,
@@ -154,7 +160,13 @@ async def seed_data(mock_db):
             "amenities": ["WiFi"],
             "is_available": True,
             "max_guests": 2,
-            "location": {"city": "Bangalore", "area": "Indiranagar", "lat": 12.9, "lng": 77.6, "address": "Test"},
+            "location": {
+                "city": "Bangalore",
+                "area": "Indiranagar",
+                "lat": 12.9,
+                "lng": 77.6,
+                "address": "Test",
+            },
             "photos": [],
             "videos": [],
             "avg_rating": 0.0,
@@ -190,7 +202,13 @@ async def seed_data(mock_db):
             "amenities": ["WiFi"],
             "is_available": True,
             "max_guests": 2,
-            "location": {"city": "Bangalore", "area": "HSR", "lat": 12.9, "lng": 77.6, "address": "Test"},
+            "location": {
+                "city": "Bangalore",
+                "area": "HSR",
+                "lat": 12.9,
+                "lng": 77.6,
+                "address": "Test",
+            },
             "photos": [],
             "videos": [],
             "avg_rating": 0.0,
@@ -198,7 +216,7 @@ async def seed_data(mock_db):
             "food_preference": "both",
             "smoking_policy": "non_smoking",
             "alcohol_policy": "non_alcohol",
-            "view_type": "garden_view",
+            "view_type": "no_view",
             "has_balcony": False,
             "policies": {
                 "check_in_time": "14:00",
@@ -230,9 +248,9 @@ async def seed_data(mock_db):
             "final_price_per_night": 1200.0,
             "price_breakdown": [],
             "subtotal": 2400.0,
-            "gst_rate": 0.12,
-            "gst_amount": 288.0,
-            "total_price": 2688.0,
+            "gst_rate": 0.05,
+            "gst_amount": 120.0,
+            "total_price": 2520.0,
             "offer_code": None,
             "discount_amount": 0.0,
             "payment_status": "pending",
@@ -258,7 +276,9 @@ async def seed_data(mock_db):
 
 
 async def _login(client, email, password):
-    res = await client.post("/api/auth/login", json={"email": email, "password": password})
+    res = await client.post(
+        "/api/auth/login", json={"email": email, "password": password}
+    )
     assert res.status_code == 200
     return res.json()["access_token"]
 

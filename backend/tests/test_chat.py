@@ -27,7 +27,9 @@ def test_bookings_navigation_for_user():
 
 
 def test_host_listing_navigation():
-    reply = resolve_chat_intent("manage my listings", {"is_authenticated": True, "is_host": True})
+    reply = resolve_chat_intent(
+        "manage my listings", {"is_authenticated": True, "is_host": True}
+    )
     assert any(action.path == "/host/rooms" for action in reply.actions)
 
 

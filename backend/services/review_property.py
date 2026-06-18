@@ -20,7 +20,11 @@ def property_query_from_room(room: dict[str, Any]) -> dict[str, Any]:
 
 async def get_property_room_ids(room: dict[str, Any], *, database) -> list[str]:
     q = property_query_from_room(room)
-    rooms_coll = database["rooms"] if hasattr(database, "__getitem__") else database.collection("rooms")
+    rooms_coll = (
+        database["rooms"]
+        if hasattr(database, "__getitem__")
+        else database.collection("rooms")
+    )
     siblings = await rooms_coll.find(q).to_list(200)
     if not siblings:
         return [str(room["_id"])]

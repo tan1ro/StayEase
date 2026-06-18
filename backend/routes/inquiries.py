@@ -23,14 +23,22 @@ async def _enrich_inquiries(items: list[dict]) -> list[dict]:
     if room_ids:
         object_ids = [ObjectId(rid) for rid in room_ids if ObjectId.is_valid(rid)]
         if object_ids:
-            rooms = await database.collection("rooms").find({"_id": {"$in": object_ids}}).to_list(len(object_ids))
+            rooms = (
+                await database.collection("rooms")
+                .find({"_id": {"$in": object_ids}})
+                .to_list(len(object_ids))
+            )
             room_map = {str(room["_id"]): room for room in rooms}
 
     host_map: dict[str, dict] = {}
     if host_ids:
         object_ids = [ObjectId(hid) for hid in host_ids if ObjectId.is_valid(hid)]
         if object_ids:
-            hosts = await database.collection("users").find({"_id": {"$in": object_ids}}).to_list(len(object_ids))
+            hosts = (
+                await database.collection("users")
+                .find({"_id": {"$in": object_ids}})
+                .to_list(len(object_ids))
+            )
             host_map = {str(host["_id"]): host for host in hosts}
 
     enriched: list[dict] = []

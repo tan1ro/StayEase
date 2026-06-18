@@ -30,7 +30,6 @@ from services.cloudinary import upload_image
 from services.email import send_template_email
 from services.roles import is_host_role, resolve_registration_role
 
-
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 PHONE_PLACEHOLDER = "0000000000"
@@ -72,7 +71,9 @@ async def register(
 
     existing = await users.find_one({"email": payload.email.strip().lower()})
     if existing:
-        raise HTTPException(status_code=422, detail={"email": "Email already registered"})
+        raise HTTPException(
+            status_code=422, detail={"email": "Email already registered"}
+        )
 
     email = payload.email.strip().lower()
 
@@ -82,7 +83,9 @@ async def register(
     if payload.referred_by:
         referred_by_user = await users.find_one({"referral_code": payload.referred_by})
         if not referred_by_user:
-            raise HTTPException(status_code=422, detail={"referred_by": "Invalid referral code"})
+            raise HTTPException(
+                status_code=422, detail={"referred_by": "Invalid referral code"}
+            )
 
     role = resolve_registration_role(
         email=email,
@@ -117,7 +120,9 @@ async def register(
         except DuplicateKeyError as exc:
             key = getattr(exc, "details", {}).get("keyPattern", {})
             if "email" in key:
-                raise HTTPException(status_code=422, detail={"email": "Email already registered"}) from exc
+                raise HTTPException(
+                    status_code=422, detail={"email": "Email already registered"}
+                ) from exc
             raise
         if referred_by_user:
             await users.update_one(
@@ -143,7 +148,9 @@ async def register(
             raise
         except DuplicateKeyError:
             if attempt == 4:
-                raise HTTPException(status_code=500, detail="Registration failed, please retry") from None
+                raise HTTPException(
+                    status_code=500, detail="Registration failed, please retry"
+                ) from None
             continue
 
     if inserted_id is None:
@@ -159,7 +166,11 @@ async def register(
         context={"user": serialize_doc(user)},
     )
 
-    return {"access_token": token, "token_type": "bearer", "user": UserPublic.from_mongo(user)}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": UserPublic.from_mongo(user),
+    }
 
 
 @router.post("/login")
@@ -171,10 +182,16 @@ async def login(
     email = payload.email.strip().lower()
     user = await users.find_one({"email": email})
     if not user or not verify_password(payload.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
 
     token = create_access_token(subject=str(user["_id"]), role=user["role"])
-    return {"access_token": token, "token_type": "bearer", "user": UserPublic.from_mongo(user)}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": UserPublic.from_mongo(user),
+    }
 
 
 @router.post("/forgot-password")
@@ -244,7 +261,9 @@ async def oauth_google(
     except DuplicateKeyError:
         user = await users.find_one({"email": email})
         if not user:
-            raise HTTPException(status_code=500, detail="OAuth sign-in failed") from None
+            raise HTTPException(
+                status_code=500, detail="OAuth sign-in failed"
+            ) from None
         return _auth_payload(user)
 
     if referred_by_user:
@@ -265,7 +284,9 @@ async def complete_profile(
 ):
     users = db["users"]
     if not _needs_phone(user) and user.get("onboarding_completed"):
-        raise HTTPException(status_code=400, detail={"profile": "Profile is already complete"})
+        raise HTTPException(
+            status_code=400, detail={"profile": "Profile is already complete"}
+        )
 
     await users.update_one(
         {"_id": user["_id"]},
@@ -322,7 +343,10 @@ async def update_profile(
         import re
 
         if not re.fullmatch(r"\d{10}", phone):
-            raise HTTPException(status_code=422, detail={"phone": "Phone must be a 10-digit India mobile number"})
+            raise HTTPException(
+                status_code=422,
+                detail={"phone": "Phone must be a 10-digit India mobile number"},
+            )
         updates["phone"] = phone
     if about_me is not None:
         updates["about_me"] = about_me
@@ -332,7 +356,10 @@ async def update_profile(
             prefs = NotificationPrefs.model_validate(prefs_data)
             updates["notification_prefs"] = prefs.model_dump()
         except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(status_code=422, detail={"notification_prefs": "Invalid notification preferences"}) from e
+            raise HTTPException(
+                status_code=422,
+                detail={"notification_prefs": "Invalid notification preferences"},
+            ) from e
 
     if avatar is not None and avatar.filename:
         uploaded = await upload_image(avatar)
@@ -355,11 +382,15 @@ async def verify_identity(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     if id_type not in ("aadhar", "pan", "passport"):
-        raise HTTPException(status_code=422, detail={"id_type": "Invalid identity type"})
+        raise HTTPException(
+            status_code=422, detail={"id_type": "Invalid identity type"}
+        )
 
     uploaded = await upload_image(document)
     try:
-        identity = IdentityProof(type=id_type, number=id_number, document_url=uploaded["url"], verified=False)
+        identity = IdentityProof(
+            type=id_type, number=id_number, document_url=uploaded["url"], verified=False
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail={"id_number": str(e)}) from e
 
@@ -368,7 +399,10 @@ async def verify_identity(
         {"_id": user["_id"]},
         {"$set": {"identity_proof": proof}},
     )
-    return {"message": "Identity document submitted for verification", "identity_proof": proof}
+    return {
+        "message": "Identity document submitted for verification",
+        "identity_proof": proof,
+    }
 
 
 @router.post("/verify-email")
@@ -383,15 +417,25 @@ async def verify_email(
     stored_otp = user.get("email_otp")
     expires = user.get("email_otp_expires")
     if not stored_otp or not expires:
-        raise HTTPException(status_code=422, detail={"otp": "No OTP requested. Use resend-otp first."})
+        raise HTTPException(
+            status_code=422, detail={"otp": "No OTP requested. Use resend-otp first."}
+        )
     if utc_now() > expires:
-        raise HTTPException(status_code=422, detail={"otp": "OTP expired. Request a new one."})
+        raise HTTPException(
+            status_code=422, detail={"otp": "OTP expired. Request a new one."}
+        )
     if payload.otp != stored_otp:
         raise HTTPException(status_code=422, detail={"otp": "Invalid OTP"})
 
     await db["users"].update_one(
         {"_id": user["_id"]},
-        {"$set": {"email_verified": True, "email_otp": None, "email_otp_expires": None}},
+        {
+            "$set": {
+                "email_verified": True,
+                "email_otp": None,
+                "email_otp_expires": None,
+            }
+        },
     )
     return {"message": "Email verified successfully"}
 

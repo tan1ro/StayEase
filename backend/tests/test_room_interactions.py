@@ -41,7 +41,9 @@ async def test_list_received_inquiries(client, guest_token, host_token, seed_dat
     )
     assert res.status_code == 200
     data = res.json()
-    assert any(item["message"].startswith("Can we get a late checkout") for item in data)
+    assert any(
+        item["message"].startswith("Can we get a late checkout") for item in data
+    )
     assert any(item.get("room_title") for item in data)
 
 

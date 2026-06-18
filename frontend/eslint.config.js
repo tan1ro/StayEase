@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
@@ -15,20 +16,23 @@ export default [
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: {
-        window: 'readonly',
-        document: 'readonly',
-        navigator: 'readonly',
-        localStorage: 'readonly',
-        console: 'readonly',
-        fetch: 'readonly',
-        FormData: 'readonly',
-        URL: 'readonly',
-        URLSearchParams: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        AbortController: 'readonly',
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
       },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        global: 'readonly',
+        Image: 'readonly',
+        createImageBitmap: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['src/tests/**/*.{js,jsx}'],
+    rules: {
+      'no-unused-vars': 'off',
+      'no-undef': 'off',
     },
   },
 ];

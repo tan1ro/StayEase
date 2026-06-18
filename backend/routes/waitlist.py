@@ -15,7 +15,10 @@ router = APIRouter(prefix="/api/waitlist", tags=["waitlist"])
 
 
 @router.post("", status_code=201)
-async def join_waitlist(payload: WaitlistCreate, user: dict = Depends(require_role("tourist", "host", "admin"))):
+async def join_waitlist(
+    payload: WaitlistCreate,
+    user: dict = Depends(require_role("tourist", "host", "admin")),
+):
     doc = {
         "room_id": payload.room_id,
         "guest_id": str(user["_id"]),
@@ -29,14 +32,18 @@ async def join_waitlist(payload: WaitlistCreate, user: dict = Depends(require_ro
     try:
         res = await database.collection("waitlist").insert_one(doc)
     except DuplicateKeyError as exc:
-        raise HTTPException(status_code=409, detail="You are already on the waitlist for these dates") from exc
+        raise HTTPException(
+            status_code=409, detail="You are already on the waitlist for these dates"
+        ) from exc
     created = await database.collection("waitlist").find_one({"_id": res.inserted_id})
     return serialize_doc(created)
 
 
 @router.get("/{phone}")
 async def get_waitlist_by_phone(phone: str):
-    items = await database.collection("waitlist").find({"guest_phone": phone}).to_list(100)
+    items = (
+        await database.collection("waitlist").find({"guest_phone": phone}).to_list(100)
+    )
     return [serialize_doc(i) for i in items]
 
 

@@ -59,7 +59,9 @@ async def commit_room_inquiry(
     }
 
     async def _txn(session) -> dict[str, Any]:
-        res = await database.collection("inquiries").insert_one(inquiry_doc, session=session)
+        res = await database.collection("inquiries").insert_one(
+            inquiry_doc, session=session
+        )
         if host_id:
             await database.collection("notifications").insert_one(
                 {
@@ -74,7 +76,9 @@ async def commit_room_inquiry(
                 },
                 session=session,
             )
-        created = await database.collection("inquiries").find_one({"_id": res.inserted_id}, session=session)
+        created = await database.collection("inquiries").find_one(
+            {"_id": res.inserted_id}, session=session
+        )
         if created is None:
             raise RuntimeError("Inquiry insert failed")
         return created
@@ -85,10 +89,16 @@ async def commit_room_inquiry(
 async def commit_listing_report(doc: dict[str, Any]) -> dict[str, Any]:
     async def _txn(session) -> dict[str, Any]:
         try:
-            res = await database.collection("listing_reports").insert_one(doc, session=session)
+            res = await database.collection("listing_reports").insert_one(
+                doc, session=session
+            )
         except DuplicateKeyError as exc:
-            raise HTTPException(status_code=409, detail="You already reported this listing") from exc
-        created = await database.collection("listing_reports").find_one({"_id": res.inserted_id}, session=session)
+            raise HTTPException(
+                status_code=409, detail="You already reported this listing"
+            ) from exc
+        created = await database.collection("listing_reports").find_one(
+            {"_id": res.inserted_id}, session=session
+        )
         if created is None:
             raise RuntimeError("Report insert failed")
         return created
@@ -102,7 +112,9 @@ async def commit_room_delete(room_id: str) -> None:
 
     async def _txn(session) -> None:
         room_oid = ObjectId(room_id)
-        room = await database.collection("rooms").find_one({"_id": room_oid}, session=session)
+        room = await database.collection("rooms").find_one(
+            {"_id": room_oid}, session=session
+        )
         if not room:
             raise RoomNotFoundError()
 
@@ -117,17 +129,23 @@ async def commit_room_delete(room_id: str) -> None:
         if active:
             raise ActiveBookingError()
 
-        await database.collection("rooms").delete_one({"_id": room_oid}, session=session)
+        await database.collection("rooms").delete_one(
+            {"_id": room_oid}, session=session
+        )
 
     try:
         await database.run_transaction(_txn)
     except RoomNotFoundError:
         raise HTTPException(status_code=404, detail="Room not found") from None
     except ActiveBookingError:
-        raise HTTPException(status_code=409, detail="Cannot delete room with active booking") from None
+        raise HTTPException(
+            status_code=409, detail="Cannot delete room with active booking"
+        ) from None
 
 
-async def commit_add_photo(room_id: str, photo: dict[str, Any], *, max_photos: int) -> dict[str, Any]:
+async def commit_add_photo(
+    room_id: str, photo: dict[str, Any], *, max_photos: int
+) -> dict[str, Any]:
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
 
@@ -141,7 +159,9 @@ async def commit_add_photo(room_id: str, photo: dict[str, Any], *, max_photos: i
             session=session,
         )
         if result.modified_count == 0:
-            room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+            room = await database.collection("rooms").find_one(
+                {"_id": ObjectId(room_id)}, session=session
+            )
             if not room:
                 raise HTTPException(status_code=404, detail="Room not found")
             raise MaxPhotosError()
@@ -150,7 +170,9 @@ async def commit_add_photo(room_id: str, photo: dict[str, Any], *, max_photos: i
     try:
         return await database.run_transaction(_txn)
     except MaxPhotosError:
-        raise HTTPException(status_code=422, detail={"photos": f"Maximum {max_photos} photos allowed"}) from None
+        raise HTTPException(
+            status_code=422, detail={"photos": f"Maximum {max_photos} photos allowed"}
+        ) from None
 
 
 async def commit_delete_photo(room_id: str, public_id: str) -> list[dict[str, Any]]:
@@ -165,7 +187,9 @@ async def commit_delete_photo(room_id: str, public_id: str) -> list[dict[str, An
             session=session,
         )
         if not room:
-            existing = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+            existing = await database.collection("rooms").find_one(
+                {"_id": ObjectId(room_id)}, session=session
+            )
             if not existing:
                 raise HTTPException(status_code=404, detail="Room not found")
             raise PhotoNotFoundError()
@@ -186,12 +210,16 @@ async def commit_delete_photo(room_id: str, public_id: str) -> list[dict[str, An
         raise HTTPException(status_code=404, detail="Photo not found") from None
 
 
-async def commit_set_primary_photo(room_id: str, public_id: str) -> list[dict[str, Any]]:
+async def commit_set_primary_photo(
+    room_id: str, public_id: str
+) -> list[dict[str, Any]]:
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
 
     async def _txn(session) -> list[dict[str, Any]]:
-        room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+        room = await database.collection("rooms").find_one(
+            {"_id": ObjectId(room_id)}, session=session
+        )
         if not room:
             raise HTTPException(status_code=404, detail="Room not found")
         photos = room.get("photos", [])
@@ -212,12 +240,16 @@ async def commit_set_primary_photo(room_id: str, public_id: str) -> list[dict[st
         raise HTTPException(status_code=404, detail="Photo not found") from None
 
 
-async def commit_reorder_photos(room_id: str, public_ids: list[str]) -> list[dict[str, Any]]:
+async def commit_reorder_photos(
+    room_id: str, public_ids: list[str]
+) -> list[dict[str, Any]]:
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
 
     async def _txn(session) -> list[dict[str, Any]]:
-        room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+        room = await database.collection("rooms").find_one(
+            {"_id": ObjectId(room_id)}, session=session
+        )
         if not room:
             raise HTTPException(status_code=404, detail="Room not found")
         photos = room.get("photos", [])
@@ -239,7 +271,9 @@ async def commit_reorder_photos(room_id: str, public_ids: list[str]) -> list[dic
     return await database.run_transaction(_txn)
 
 
-async def commit_add_video(room_id: str, video: dict[str, Any], *, max_videos: int) -> dict[str, Any]:
+async def commit_add_video(
+    room_id: str, video: dict[str, Any], *, max_videos: int
+) -> dict[str, Any]:
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
 
@@ -253,7 +287,9 @@ async def commit_add_video(room_id: str, video: dict[str, Any], *, max_videos: i
             session=session,
         )
         if result.modified_count == 0:
-            room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+            room = await database.collection("rooms").find_one(
+                {"_id": ObjectId(room_id)}, session=session
+            )
             if not room:
                 raise HTTPException(status_code=404, detail="Room not found")
             raise MaxVideosError()
@@ -262,7 +298,9 @@ async def commit_add_video(room_id: str, video: dict[str, Any], *, max_videos: i
     try:
         return await database.run_transaction(_txn)
     except MaxVideosError:
-        raise HTTPException(status_code=422, detail={"videos": f"Maximum {max_videos} videos allowed"}) from None
+        raise HTTPException(
+            status_code=422, detail={"videos": f"Maximum {max_videos} videos allowed"}
+        ) from None
 
 
 async def commit_delete_video(room_id: str, public_id: str) -> list[dict[str, Any]]:
@@ -277,7 +315,9 @@ async def commit_delete_video(room_id: str, public_id: str) -> list[dict[str, An
             session=session,
         )
         if not room:
-            existing = await database.collection("rooms").find_one({"_id": ObjectId(room_id)}, session=session)
+            existing = await database.collection("rooms").find_one(
+                {"_id": ObjectId(room_id)}, session=session
+            )
             if not existing:
                 raise HTTPException(status_code=404, detail="Room not found")
             raise VideoNotFoundError()

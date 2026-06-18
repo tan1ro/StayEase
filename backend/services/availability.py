@@ -13,7 +13,9 @@ def stay_night_dates(check_in: date, check_out: date) -> list[str]:
     return nights
 
 
-def blocked_dates_conflict(blocked_dates: list[str] | None, check_in: date, check_out: date) -> bool:
+def blocked_dates_conflict(
+    blocked_dates: list[str] | None, check_in: date, check_out: date
+) -> bool:
     blocked = set(blocked_dates or [])
     if not blocked:
         return False

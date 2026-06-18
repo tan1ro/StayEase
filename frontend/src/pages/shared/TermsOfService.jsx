@@ -87,7 +87,7 @@ const sections = [
       'Dynamic pricing adjustments (for example weekend surcharge, peak season, early bird discount, long-stay discount, or last-minute surcharge)',
       'Promotional offer discounts and referral credits, where applicable',
       'StayEase guest service fee — currently 10% of the booking subtotal (before guest service fee and GST)',
-      'Goods and Services Tax (GST) on the room tariff at Indian hotel slabs: 5% where the effective nightly tariff is ₹7,500 or below, and 18% where it is above ₹7,500, split equally as CGST and SGST',
+      'Goods and Services Tax (GST) on the room tariff at Indian hotel slabs: 0% below ₹1,000/night, 5% for ₹1,001–₹7,500/night (ITC not allowed), 18% above ₹7,500/night (ITC allowed for businesses), and 0% for qualifying long-term dormitory stays (90+ nights up to ₹20,000/month per person), split equally as CGST and SGST where applicable',
       'Hosts pay a separate StayEase host service fee — currently 3% of the booking subtotal — deducted from the host payout (see Service fees)',
     ],
   },

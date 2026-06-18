@@ -12,8 +12,29 @@ from services.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api", tags=["analytics"])
 
-MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTH_NAMES = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+WEEKDAY_NAMES = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
 
 
 def _parse_year(year: int | None) -> int:
@@ -71,7 +92,9 @@ async def _host_year_analytics(host_id: str, year: int) -> dict:
         return {
             "year": year,
             "monthly_revenue": empty_months,
-            "monthly_occupancy": [{"month": m["month"], "occupancy_percent": 0.0} for m in empty_months],
+            "monthly_occupancy": [
+                {"month": m["month"], "occupancy_percent": 0.0} for m in empty_months
+            ],
             "revenue_detail": empty_months,
             "room_type_distribution": [],
             "top_rooms": [],
@@ -117,40 +140,53 @@ async def _host_year_analytics(host_id: str, year: int) -> dict:
             _nights_in_month(b["check_in_date"], b["check_out_date"], year, month)
             for b in active_bookings
         )
-        occupancy = round((booked_nights / available_nights) * 100, 1) if available_nights else 0.0
+        occupancy = (
+            round((booked_nights / available_nights) * 100, 1)
+            if available_nights
+            else 0.0
+        )
 
         month_paid = [
-            b for b in paid_bookings
-            if month_start.isoformat() <= b.get("check_in_date", "") < month_end.isoformat()
+            b
+            for b in paid_bookings
+            if month_start.isoformat()
+            <= b.get("check_in_date", "")
+            < month_end.isoformat()
         ]
         revenue = round(sum(_host_earning(b) for b in month_paid), 2)
         platform_fees = round(sum(_host_platform_fee(b) for b in month_paid), 2)
-        gst_collected = round(sum(float(b.get("gst_amount", 0) or 0) for b in month_paid), 2)
+        gst_collected = round(
+            sum(float(b.get("gst_amount", 0) or 0) for b in month_paid), 2
+        )
 
         ytd_revenue += revenue
         ytd_platform_fees += platform_fees
         ytd_gst_collected += gst_collected
 
         month_label = MONTH_NAMES[month - 1]
-        monthly_revenue.append({
-            "month": month_label,
-            "month_number": month,
-            "revenue": revenue,
-            "bookings": len(month_paid),
-            "occupancy": occupancy,
-            "platform_fees": platform_fees,
-            "gst_collected": gst_collected,
-            "booked_nights": booked_nights,
-            "available_nights": available_nights,
-        })
+        monthly_revenue.append(
+            {
+                "month": month_label,
+                "month_number": month,
+                "revenue": revenue,
+                "bookings": len(month_paid),
+                "occupancy": occupancy,
+                "platform_fees": platform_fees,
+                "gst_collected": gst_collected,
+                "booked_nights": booked_nights,
+                "available_nights": available_nights,
+            }
+        )
         monthly_occupancy.append({"month": month_label, "occupancy_percent": occupancy})
-        revenue_detail.append({
-            "month": month_label,
-            "month_number": month,
-            "revenue": revenue,
-            "platform_fees": platform_fees,
-            "gst_collected": gst_collected,
-        })
+        revenue_detail.append(
+            {
+                "month": month_label,
+                "month_number": month,
+                "revenue": revenue,
+                "platform_fees": platform_fees,
+                "gst_collected": gst_collected,
+            }
+        )
 
     type_counts: Counter[str] = Counter()
     for room in rooms:
@@ -170,36 +206,50 @@ async def _host_year_analytics(host_id: str, year: int) -> dict:
         room_stats[rid]["revenue"] += _host_earning(b)
 
     top_rooms = []
-    for rid, stats in sorted(room_stats.items(), key=lambda x: x[1]["revenue"], reverse=True)[:5]:
+    for rid, stats in sorted(
+        room_stats.items(), key=lambda x: x[1]["revenue"], reverse=True
+    )[:5]:
         room = rooms_by_id.get(rid, {})
-        top_rooms.append({
-            "room_id": rid,
-            "room_number": room.get("room_number", ""),
-            "title": room.get("title", ""),
-            "bookings": stats["bookings"],
-            "revenue": round(stats["revenue"], 2),
-            "avg_rating": room.get("avg_rating", 0.0),
-            "total_reviews": room.get("total_reviews", 0),
-        })
+        top_rooms.append(
+            {
+                "room_id": rid,
+                "room_number": room.get("room_number", ""),
+                "title": room.get("title", ""),
+                "bookings": stats["bookings"],
+                "revenue": round(stats["revenue"], 2),
+                "avg_rating": room.get("avg_rating", 0.0),
+                "total_reviews": room.get("total_reviews", 0),
+            }
+        )
 
     year_bookings = [
-        b for b in active_bookings
-        if b.get("check_in_date", "")[:4] == str(year)
+        b for b in active_bookings if b.get("check_in_date", "")[:4] == str(year)
     ]
     year_paid = [
-        b for b in paid_bookings
-        if b.get("check_in_date", "")[:4] == str(year)
+        b for b in paid_bookings if b.get("check_in_date", "")[:4] == str(year)
     ]
-    stay_nights = [b.get("total_nights", 0) for b in year_bookings if b.get("total_nights")]
-    avg_stay_nights = round(sum(stay_nights) / len(stay_nights), 1) if stay_nights else 0.0
+    stay_nights = [
+        b.get("total_nights", 0) for b in year_bookings if b.get("total_nights")
+    ]
+    avg_stay_nights = (
+        round(sum(stay_nights) / len(stay_nights), 1) if stay_nights else 0.0
+    )
     ytd_nights_booked = sum(b.get("total_nights", 0) for b in year_paid)
     ytd_bookings = len(year_paid)
-    avg_daily_rate = round(ytd_revenue / ytd_nights_booked, 2) if ytd_nights_booked else 0.0
+    avg_daily_rate = (
+        round(ytd_revenue / ytd_nights_booked, 2) if ytd_nights_booked else 0.0
+    )
     net_earnings = round(ytd_revenue - ytd_platform_fees, 2)
-    ytd_occupancy_avg = round(
-        sum(m["occupancy"] for m in monthly_revenue) / len(monthly_revenue), 1
-    ) if monthly_revenue else 0.0
-    peak_month = max(monthly_revenue, key=lambda m: m["revenue"])["month"] if monthly_revenue else None
+    ytd_occupancy_avg = (
+        round(sum(m["occupancy"] for m in monthly_revenue) / len(monthly_revenue), 1)
+        if monthly_revenue
+        else 0.0
+    )
+    peak_month = (
+        max(monthly_revenue, key=lambda m: m["revenue"])["month"]
+        if monthly_revenue
+        else None
+    )
 
     category_revenue: dict[str, float] = defaultdict(float)
     for b in year_paid:
@@ -208,7 +258,9 @@ async def _host_year_analytics(host_id: str, year: int) -> dict:
         category_revenue[cat] += _host_earning(b)
     revenue_by_category = [
         {"category": cat, "revenue": round(rev, 2)}
-        for cat, rev in sorted(category_revenue.items(), key=lambda x: x[1], reverse=True)
+        for cat, rev in sorted(
+            category_revenue.items(), key=lambda x: x[1], reverse=True
+        )
     ]
 
     weekday_counts: Counter[str] = Counter()
@@ -271,18 +323,27 @@ async def _host_stats_dashboard(host_id: str, year: int | None = None) -> dict:
     total_revenue = round(sum(_host_earning(b) for b in paid_bookings), 2)
 
     active = [b for b in all_bookings if b.get("status") == "confirmed"]
-    avg_rating = round(sum(r.get("avg_rating", 0) for r in rooms) / len(rooms), 2) if rooms else 0.0
+    avg_rating = (
+        round(sum(r.get("avg_rating", 0) for r in rooms) / len(rooms), 2)
+        if rooms
+        else 0.0
+    )
 
     month_revenue = 0.0
     month_platform_fees = 0.0
     for b in paid_bookings:
         check_in = b.get("check_in_date", "")
-        if check_in >= date(today.year, today.month, 1).isoformat() and check_in[:7] == today.isoformat()[:7]:
+        if (
+            check_in >= date(today.year, today.month, 1).isoformat()
+            and check_in[:7] == today.isoformat()[:7]
+        ):
             month_revenue += _host_earning(b)
             month_platform_fees += _host_platform_fee(b)
 
     year_analytics = await _host_year_analytics(host_id, yr)
-    current_month = year_analytics["monthly_revenue"][today.month - 1] if yr == today.year else None
+    current_month = (
+        year_analytics["monthly_revenue"][today.month - 1] if yr == today.year else None
+    )
 
     cancellation_rate = (
         round((cancelled_bookings / total_bookings) * 100, 1) if total_bookings else 0.0
@@ -296,7 +357,8 @@ async def _host_stats_dashboard(host_id: str, year: int | None = None) -> dict:
         serialize_doc(b)
         for b in sorted(
             [
-                b for b in all_bookings
+                b
+                for b in all_bookings
                 if b.get("status") == "confirmed"
                 and b.get("check_in_date", "") >= today_iso
             ],
@@ -320,7 +382,11 @@ async def _host_stats_dashboard(host_id: str, year: int | None = None) -> dict:
         "avg_rating": avg_rating,
         "recent_bookings": [
             serialize_doc(b)
-            for b in sorted(all_bookings, key=lambda x: x.get("created_at", datetime.min), reverse=True)[:5]
+            for b in sorted(
+                all_bookings,
+                key=lambda x: x.get("created_at", datetime.min),
+                reverse=True,
+            )[:5]
         ],
         "cancellation_rate": cancellation_rate,
         "booking_status_breakdown": booking_status_breakdown,
@@ -335,9 +401,14 @@ async def _tourist_dashboard(user: dict) -> dict:
     today = date.today().isoformat()
 
     all_bookings = await bookings_col.find({"guest_id": guest_id}).to_list(500)
-    paid = [b for b in all_bookings if b.get("payment_status") == "paid" and b.get("status") != "cancelled"]
+    paid = [
+        b
+        for b in all_bookings
+        if b.get("payment_status") == "paid" and b.get("status") != "cancelled"
+    ]
     upcoming = [
-        b for b in all_bookings
+        b
+        for b in all_bookings
         if b.get("status") == "confirmed" and b.get("check_in_date", "") >= today
     ]
     total_spent = sum(b.get("total_price", 0) for b in paid)
@@ -350,7 +421,11 @@ async def _tourist_dashboard(user: dict) -> dict:
         "wishlist_count": len(user.get("wishlist", [])),
         "recent_bookings": [
             serialize_doc(b)
-            for b in sorted(all_bookings, key=lambda x: x.get("created_at", datetime.min), reverse=True)[:5]
+            for b in sorted(
+                all_bookings,
+                key=lambda x: x.get("created_at", datetime.min),
+                reverse=True,
+            )[:5]
         ],
     }
 
@@ -366,7 +441,9 @@ async def dashboard(
 
 
 @router.get("/guest/dashboard")
-async def guest_dashboard(user: dict = Depends(require_role("tourist", "host", "admin"))):
+async def guest_dashboard(
+    user: dict = Depends(require_role("tourist", "host", "admin"))
+):
     return await _tourist_dashboard(user)
 
 

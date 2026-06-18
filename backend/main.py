@@ -59,17 +59,29 @@ def create_app() -> FastAPI:
     async def validation_exception_handler(_: Request, exc: RequestValidationError):
         field_errors: dict[str, str] = {}
         for e in exc.errors():
-            loc = [str(p) for p in e.get("loc", []) if p not in ("body", "query", "path", "header")]
+            loc = [
+                str(p)
+                for p in e.get("loc", [])
+                if p not in ("body", "query", "path", "header")
+            ]
             key = ".".join(loc) if loc else "detail"
             field_errors[key] = e.get("msg", "Invalid value")
-        return JSONResponse(status_code=422, content={"message": "Validation error", "errors": field_errors})
+        return JSONResponse(
+            status_code=422,
+            content={"message": "Validation error", "errors": field_errors},
+        )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Request, exc: HTTPException):
         detail = exc.detail
         if isinstance(detail, dict):
-            return JSONResponse(status_code=exc.status_code, content={"message": "Error", "errors": detail})
-        return JSONResponse(status_code=exc.status_code, content={"message": str(detail)})
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"message": "Error", "errors": detail},
+            )
+        return JSONResponse(
+            status_code=exc.status_code, content={"message": str(detail)}
+        )
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, __: Exception):

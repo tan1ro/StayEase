@@ -44,8 +44,12 @@ async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
         partialFilterExpression={"status": "open"},
         name="unique_open_report_per_reporter",
     )
-    await db["inquiries"].create_index([("guest_id", ASCENDING), ("created_at", ASCENDING)])
-    await db["inquiries"].create_index([("host_id", ASCENDING), ("created_at", ASCENDING)])
+    await db["inquiries"].create_index(
+        [("guest_id", ASCENDING), ("created_at", ASCENDING)]
+    )
+    await db["inquiries"].create_index(
+        [("host_id", ASCENDING), ("created_at", ASCENDING)]
+    )
     await db["waitlist"].create_index(
         [
             ("room_id", ASCENDING),
@@ -58,7 +62,9 @@ async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
         name="unique_waiting_entry",
     )
     await db["chat_sessions"].create_index("session_id", unique=True)
-    await db["chat_sessions"].create_index([("user_id", ASCENDING), ("updated_at", ASCENDING)])
+    await db["chat_sessions"].create_index(
+        [("user_id", ASCENDING), ("updated_at", ASCENDING)]
+    )
 
 
 async def _check_transactions(client: AsyncIOMotorClient) -> bool:
@@ -71,7 +77,9 @@ async def _check_transactions(client: AsyncIOMotorClient) -> bool:
                 pass
         return True
     except Exception:
-        logger.info("MongoDB multi-document transactions unavailable; using atomic fallbacks")
+        logger.info(
+            "MongoDB multi-document transactions unavailable; using atomic fallbacks"
+        )
         return False
 
 
@@ -99,7 +107,9 @@ async def disconnect_db() -> None:
 def get_database() -> AsyncIOMotorDatabase:
     """FastAPI dependency — returns the connected Motor database instance."""
     if _db is None:
-        raise RuntimeError("Database not connected. Call connect_db() during application startup.")
+        raise RuntimeError(
+            "Database not connected. Call connect_db() during application startup."
+        )
     return _db
 
 

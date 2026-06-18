@@ -17,12 +17,20 @@ async def get_invoice(booking_id: str, user: dict = Depends(get_current_user)):
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    booking = await database.collection("bookings").find_one({"_id": ObjectId(booking_id)}) if ObjectId.is_valid(booking_id) else None
+    booking = (
+        await database.collection("bookings").find_one({"_id": ObjectId(booking_id)})
+        if ObjectId.is_valid(booking_id)
+        else None
+    )
     if booking:
         role = normalize_role(user.get("role"))
         if role == "tourist" and booking.get("guest_id") != str(user["_id"]):
             raise HTTPException(status_code=403, detail="Forbidden")
-        if role == "host" and booking.get("host_id") != str(user["_id"]) and booking.get("guest_id") != str(user["_id"]):
+        if (
+            role == "host"
+            and booking.get("host_id") != str(user["_id"])
+            and booking.get("guest_id") != str(user["_id"])
+        ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
     return serialize_doc(invoice)

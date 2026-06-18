@@ -6,7 +6,6 @@ from typing import Any, Optional
 from services.gst import calculate_gst
 from services.platform_fees import calculate_platform_fees
 
-
 PEAK_MONTHS = {12, 1, 3}
 
 VIEW_PREMIUMS: dict[str, float] = {
@@ -50,6 +49,7 @@ def calculate_dynamic_pricing(
     referral_credits: float = 0.0,
     view_type: Optional[str] = None,
     facing_side: Optional[str] = None,
+    room_category: Optional[str] = None,
 ) -> dict[str, Any]:
     nights_list = _iter_nights(check_in, check_out)
     total_nights = len(nights_list)
@@ -59,7 +59,11 @@ def calculate_dynamic_pricing(
     line_items: list[dict[str, Any]] = []
     subtotal_before_adjustments = base_price * total_nights
     line_items.append(
-        {"label": "Base price", "amount": round(subtotal_before_adjustments, 2), "type": "base"}
+        {
+            "label": "Base price",
+            "amount": round(subtotal_before_adjustments, 2),
+            "type": "base",
+        }
     )
 
     adjustments = 0.0
@@ -189,7 +193,11 @@ def calculate_dynamic_pricing(
         )
 
     final_price_per_night = subtotal / total_nights if total_nights else base_price
-    gst = calculate_gst(final_price_per_night, total_nights)
+    gst = calculate_gst(
+        final_price_per_night,
+        total_nights,
+        room_category=room_category,
+    )
     fees = calculate_platform_fees(subtotal)
 
     line_items.append(

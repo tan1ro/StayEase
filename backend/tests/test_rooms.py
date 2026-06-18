@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 
-
 ROOM_PAYLOAD = {
     "room_number": "999",
     "title": "New Test Room Title",
@@ -11,7 +10,13 @@ ROOM_PAYLOAD = {
     "amenities": ["WiFi"],
     "is_available": True,
     "max_guests": 2,
-    "location": {"city": "Bangalore", "area": "Test", "lat": 12.9, "lng": 77.6, "address": "Test Addr"},
+    "location": {
+        "city": "Bangalore",
+        "area": "Test",
+        "lat": 12.9,
+        "lng": 77.6,
+        "address": "Test Addr",
+    },
     "food_preference": "veg",
     "smoking_policy": "non_smoking",
     "alcohol_policy": "non_alcohol",
@@ -101,7 +106,9 @@ async def test_filter_rooms_by_balcony(client, seed_data):
 async def test_filter_rooms_combined_food_and_view(client, seed_data):
     res = await client.get("/api/rooms", params={"food": "veg", "view": "hill_view"})
     data = res.json()
-    assert all(r["food_preference"] == "veg" and r["view_type"] == "hill_view" for r in data)
+    assert all(
+        r["food_preference"] == "veg" and r["view_type"] == "hill_view" for r in data
+    )
 
 
 async def test_filter_available_rooms(client, seed_data):
@@ -150,7 +157,9 @@ async def test_upload_room_photo(client, host_token, seed_data, monkeypatch):
     assert res.status_code == 200
 
 
-async def test_delete_room_photo_with_folder_public_id(client, host_token, seed_data, monkeypatch):
+async def test_delete_room_photo_with_folder_public_id(
+    client, host_token, seed_data, monkeypatch
+):
     public_id = "stayease/images/sample-photo"
 
     async def mock_upload(file):

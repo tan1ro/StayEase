@@ -41,7 +41,11 @@ async def get_host_profile(host_id: str):
     room_titles = {str(room["_id"]): room.get("title", "") for room in rooms}
     room_photos = {
         str(room["_id"]): next(
-            (photo.get("url") for photo in (room.get("photos") or []) if photo.get("is_primary")),
+            (
+                photo.get("url")
+                for photo in (room.get("photos") or [])
+                if photo.get("is_primary")
+            ),
             (room.get("photos") or [{}])[0].get("url") if room.get("photos") else None,
         )
         for room in rooms
@@ -57,14 +61,20 @@ async def get_host_profile(host_id: str):
         )
 
     reviews_by_room = aggregate_reviews_by_room(reviews, reviews_per_room=4)
-    avg_rating = round(sum(review["rating"] for review in reviews) / len(reviews), 2) if reviews else 0.0
+    avg_rating = (
+        round(sum(review["rating"] for review in reviews) / len(reviews), 2)
+        if reviews
+        else 0.0
+    )
     identity = host.get("identity_proof") or {}
 
     listings = []
     reviews_by_listing = []
     for room in rooms:
         room_id = str(room["_id"])
-        room_stats = reviews_by_room.get(room_id, {"avg_rating": 0.0, "total_reviews": 0, "reviews": []})
+        room_stats = reviews_by_room.get(
+            room_id, {"avg_rating": 0.0, "total_reviews": 0, "reviews": []}
+        )
         listing = serialize_doc(room)
         listing["avg_rating"] = room_stats["avg_rating"]
         listing["total_reviews"] = room_stats["total_reviews"]
@@ -103,7 +113,9 @@ async def get_host_profile(host_id: str):
         "role": normalize_role(host.get("role")),
         "avatar_url": host.get("avatar_url"),
         "about_me": host.get("about_me"),
-        "created_at": host.get("created_at").isoformat() if host.get("created_at") else None,
+        "created_at": (
+            host.get("created_at").isoformat() if host.get("created_at") else None
+        ),
         "email_verified": bool(host.get("email_verified")),
         "identity_verified": bool(identity.get("verified")),
         "stats": {

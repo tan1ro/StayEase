@@ -31,7 +31,11 @@ def calculate_cancellation(
     """Compute refund and cancellation charges per listing policy."""
     cancelled_at = cancelled_at or date.today()
     days_until_checkin = (check_in_date - cancelled_at).days
-    policy = cancellation_policy if cancellation_policy in POLICY_DESCRIPTIONS else "moderate"
+    policy = (
+        cancellation_policy
+        if cancellation_policy in POLICY_DESCRIPTIONS
+        else "moderate"
+    )
 
     if payment_status == "pending":
         return {

@@ -34,12 +34,21 @@ def _sorted_floor_rooms(rooms: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rooms, key=lambda room: str(room.get("room_number") or ""))
 
 
-def rooms_are_contiguous(selected: list[dict[str, Any]], floor_rooms: list[dict[str, Any]]) -> bool:
+def rooms_are_contiguous(
+    selected: list[dict[str, Any]], floor_rooms: list[dict[str, Any]]
+) -> bool:
     if not selected:
         return False
     sorted_floor = _sorted_floor_rooms(floor_rooms)
-    id_to_index = {str(room.get("_id") or room.get("id")): idx for idx, room in enumerate(sorted_floor)}
-    indices = sorted(id_to_index[str(room.get("_id") or room.get("id"))] for room in selected if str(room.get("_id") or room.get("id")) in id_to_index)
+    id_to_index = {
+        str(room.get("_id") or room.get("id")): idx
+        for idx, room in enumerate(sorted_floor)
+    }
+    indices = sorted(
+        id_to_index[str(room.get("_id") or room.get("id"))]
+        for room in selected
+        if str(room.get("_id") or room.get("id")) in id_to_index
+    )
     if len(indices) != len(selected):
         return False
     for idx in range(1, len(indices)):

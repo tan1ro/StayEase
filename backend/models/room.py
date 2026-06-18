@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from .common import MongoModel, utc_now
 
-
-RoomCategory = Literal["Single", "Double", "Triple", "Suite", "Villa", "Homestay", "Dormitory"]
+RoomCategory = Literal[
+    "Single", "Double", "Triple", "Suite", "Villa", "Homestay", "Dormitory"
+]
 FoodPreference = Literal["veg", "nonveg", "both"]
 SmokingPolicy = Literal["smoking", "non_smoking"]
 AlcoholPolicy = Literal["alcohol", "non_alcohol"]
@@ -32,6 +33,7 @@ FacingSide = Literal[
     "south_west",
     "none",
 ]
+
 
 class Photo(BaseModel):
     url: str
@@ -162,4 +164,3 @@ class RoomInDB(MongoModel):
     arrival_guide: ArrivalGuide = Field(default_factory=ArrivalGuide)
     blocked_dates: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
-

@@ -57,7 +57,15 @@ def _draw_rule(c: canvas.Canvas, x: float, y: float, width: float) -> float:
     return y - 10
 
 
-def _draw_wrapped(c: canvas.Canvas, text: str, x: float, y: float, width: float, size: int = 8, leading: int = 11) -> float:
+def _draw_wrapped(
+    c: canvas.Canvas,
+    text: str,
+    x: float,
+    y: float,
+    width: float,
+    size: int = 8,
+    leading: int = 11,
+) -> float:
     c.setFont("Helvetica", size)
     words = text.split()
     line = ""
@@ -75,7 +83,9 @@ def _draw_wrapped(c: canvas.Canvas, text: str, x: float, y: float, width: float,
     return y
 
 
-def _draw_bullets(c: canvas.Canvas, items: list[str], x: float, y: float, width: float) -> float:
+def _draw_bullets(
+    c: canvas.Canvas, items: list[str], x: float, y: float, width: float
+) -> float:
     for item in items:
         y = _draw_wrapped(c, f"• {item}", x, y, width - 8)
     return y - 4
@@ -99,7 +109,15 @@ def generate_invoice_pdf(
 
     logo = _logo_path()
     if logo:
-        c.drawImage(str(logo), margin, y - 14 * mm, width=42 * mm, height=14 * mm, preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            str(logo),
+            margin,
+            y - 14 * mm,
+            width=42 * mm,
+            height=14 * mm,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
     else:
         c.setFont("Helvetica-Bold", 14)
         c.setFillColor(colors.HexColor("#4F7FE8"))
@@ -113,7 +131,9 @@ def generate_invoice_pdf(
 
     y = _draw_rule(c, margin, y, content_w)
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(margin, y, f"Guest Name: {booking.get('guest_name', guest.get('name', ''))}")
+    c.drawString(
+        margin, y, f"Guest Name: {booking.get('guest_name', guest.get('name', ''))}"
+    )
     y -= 14
     y = _draw_rule(c, margin, y, content_w)
 
@@ -124,7 +144,9 @@ def generate_invoice_pdf(
     c.drawString(margin, y, "StayEase Verified Property")
     y -= 12
     loc = room.get("location") or {}
-    address = ", ".join(filter(None, [loc.get("address"), loc.get("area"), loc.get("city")]))
+    address = ", ".join(
+        filter(None, [loc.get("address"), loc.get("area"), loc.get("city")])
+    )
     y = _draw_wrapped(c, address, margin, y, content_w * 0.58, size=9)
     if host.get("phone"):
         c.drawString(margin, y, f"Phone: {host['phone']}")
@@ -163,12 +185,26 @@ def generate_invoice_pdf(
         return yy - 12
 
     row_y = detail_row(left_x, row_y, "Booking ID", str(booking.get("_id", "")))
-    row_y = detail_row(left_x, row_y, "Hotel Booking ID", f"{room.get('room_number', '')}-{str(booking.get('_id', ''))[-6:]}")
+    row_y = detail_row(
+        left_x,
+        row_y,
+        "Hotel Booking ID",
+        f"{room.get('room_number', '')}-{str(booking.get('_id', ''))[-6:]}",
+    )
     row_y = detail_row(left_x, row_y, "Voucher / Invoice No.", invoice_number)
     created = booking.get("created_at")
-    created_str = created.strftime("%b %d, %Y %H:%M") if hasattr(created, "strftime") else str(created or "")
+    created_str = (
+        created.strftime("%b %d, %Y %H:%M")
+        if hasattr(created, "strftime")
+        else str(created or "")
+    )
     row_y = detail_row(left_x, row_y, "Date of Booking", created_str)
-    row_y = detail_row(left_x, row_y, "Room Type", f"{room.get('room_category', '')} — {room.get('title', '')}")
+    row_y = detail_row(
+        left_x,
+        row_y,
+        "Room Type",
+        f"{room.get('room_category', '')} — {room.get('title', '')}",
+    )
     detail_row(left_x, row_y, "Occupancy", f"{booking.get('num_guests', 1)} Guest(s)")
 
     amt_y = y
@@ -206,7 +242,14 @@ def generate_invoice_pdf(
         content_w,
         size=8,
     )
-    y = _draw_wrapped(c, "Description of Service: Reservation services for accommodation.", margin, y, content_w, size=8)
+    y = _draw_wrapped(
+        c,
+        "Description of Service: Reservation services for accommodation.",
+        margin,
+        y,
+        content_w,
+        size=8,
+    )
     y -= 6
 
     c.rect(margin, y - 28, content_w, 30, stroke=1, fill=0)
@@ -224,10 +267,19 @@ def generate_invoice_pdf(
 
     verification = booking.get("check_in_verification") or {}
     if verification.get("check_in_note"):
-        y = _draw_wrapped(c, f"Check-in: {verification['check_in_note']}", margin, y, content_w, size=8)
+        y = _draw_wrapped(
+            c,
+            f"Check-in: {verification['check_in_note']}",
+            margin,
+            y,
+            content_w,
+            size=8,
+        )
         y -= 4
 
-    policy = booking.get("cancellation_policy") or policies.get("cancellation", "moderate")
+    policy = booking.get("cancellation_policy") or policies.get(
+        "cancellation", "moderate"
+    )
     bullets = CANCELLATION_BULLETS.get(policy, CANCELLATION_BULLETS["moderate"])
 
     for heading, items in (
@@ -259,10 +311,21 @@ def generate_invoice_pdf(
         y = height - margin
 
     c.setFont("Helvetica", 7)
-    y = _draw_wrapped(c, "Total rounded to nearest rupee.", margin, y, content_w, size=7)
-    y = _draw_wrapped(c, f"{settings.APP_NAME} — Smart Hotel Management", margin, y, content_w, size=7)
+    y = _draw_wrapped(
+        c, "Total rounded to nearest rupee.", margin, y, content_w, size=7
+    )
+    y = _draw_wrapped(
+        c, f"{settings.APP_NAME} — Smart Hotel Management", margin, y, content_w, size=7
+    )
     if settings.GST_NUMBER:
-        y = _draw_wrapped(c, f"GST Identification No: {settings.GST_NUMBER}", margin, y, content_w, size=7)
+        y = _draw_wrapped(
+            c,
+            f"GST Identification No: {settings.GST_NUMBER}",
+            margin,
+            y,
+            content_w,
+            size=7,
+        )
     y = _draw_wrapped(
         c,
         "Disclaimer: Hotel charges and GST collected on behalf of the property. StayEase fees relate to reservation services.",
@@ -329,7 +392,15 @@ def generate_tax_invoice_pdf(
 
     logo = _logo_path()
     if logo:
-        c.drawImage(str(logo), margin, y - 14 * mm, width=38 * mm, height=12 * mm, preserveAspectRatio=True, mask="auto")
+        c.drawImage(
+            str(logo),
+            margin,
+            y - 14 * mm,
+            width=38 * mm,
+            height=12 * mm,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
     else:
         c.setFont("Helvetica-Bold", 14)
         c.setFillColor(colors.HexColor("#4F7FE8"))
@@ -347,13 +418,33 @@ def generate_tax_invoice_pdf(
     c.setFont("Helvetica", 8)
     y -= 11
     if settings.GST_NUMBER:
-        y = _draw_wrapped(c, f"GSTIN: {settings.GST_NUMBER}", margin, y, content_w * 0.55, size=8)
-    y = _draw_wrapped(c, "HSN/SAC: 998552 (Reservation services for accommodation)", margin, y, content_w * 0.55, size=8)
-    y = _draw_wrapped(c, f"Place of Supply: {room.get('location', {}).get('city', 'India')}", margin, y, content_w * 0.55, size=8)
+        y = _draw_wrapped(
+            c, f"GSTIN: {settings.GST_NUMBER}", margin, y, content_w * 0.55, size=8
+        )
+    y = _draw_wrapped(
+        c,
+        "HSN/SAC: 998552 (Reservation services for accommodation)",
+        margin,
+        y,
+        content_w * 0.55,
+        size=8,
+    )
+    y = _draw_wrapped(
+        c,
+        f"Place of Supply: {room.get('location', {}).get('city', 'India')}",
+        margin,
+        y,
+        content_w * 0.55,
+        size=8,
+    )
 
     right_y = height - margin - 18 * mm
     created = booking.get("created_at")
-    created_str = created.strftime("%d-%b-%Y %H:%M") if hasattr(created, "strftime") else str(created or "—")
+    created_str = (
+        created.strftime("%d-%b-%Y %H:%M")
+        if hasattr(created, "strftime")
+        else str(created or "—")
+    )
     for label, value in (
         ("Invoice No.", invoice_number),
         ("Booking Ref.", str(booking.get("_id", ""))),
@@ -391,7 +482,9 @@ def generate_tax_invoice_pdf(
 
     svc_y = y - 12
     loc = room.get("location") or {}
-    address = ", ".join(filter(None, [room.get("title"), loc.get("area"), loc.get("city")]))
+    address = ", ".join(
+        filter(None, [room.get("title"), loc.get("area"), loc.get("city")])
+    )
     for label, value in (
         ("Property", address),
         ("Room No.", room.get("room_number", "—")),
@@ -412,9 +505,18 @@ def generate_tax_invoice_pdf(
     y -= 14
 
     table_w = content_w
-    col_widths = [table_w * 0.46, table_w * 0.14, table_w * 0.12, table_w * 0.14, table_w * 0.14]
+    col_widths = [
+        table_w * 0.46,
+        table_w * 0.14,
+        table_w * 0.12,
+        table_w * 0.14,
+        table_w * 0.14,
+    ]
     y = _draw_table_row(
-        c, margin, y, col_widths,
+        c,
+        margin,
+        y,
+        col_widths,
         ["Description", "HSN/SAC", "Qty", "Rate", "Amount (Rs.)"],
         header=True,
     )
@@ -427,15 +529,33 @@ def generate_tax_invoice_pdf(
             label = item.get("label", "Charge")
             rate = amount / nights if nights else amount
             y = _draw_table_row(
-                c, margin, y, col_widths,
-                [label, "998552", str(nights), _fmt_rs(rate).replace("Rs. ", ""), _fmt_rs(amount).replace("Rs. ", "")],
+                c,
+                margin,
+                y,
+                col_widths,
+                [
+                    label,
+                    "998552",
+                    str(nights),
+                    _fmt_rs(rate).replace("Rs. ", ""),
+                    _fmt_rs(amount).replace("Rs. ", ""),
+                ],
             )
     else:
         subtotal = booking.get("subtotal", 0)
         nightly = subtotal / nights if nights else subtotal
         y = _draw_table_row(
-            c, margin, y, col_widths,
-            ["Room tariff", "998552", str(nights), _fmt_rs(nightly).replace("Rs. ", ""), _fmt_rs(subtotal).replace("Rs. ", "")],
+            c,
+            margin,
+            y,
+            col_widths,
+            [
+                "Room tariff",
+                "998552",
+                str(nights),
+                _fmt_rs(nightly).replace("Rs. ", ""),
+                _fmt_rs(subtotal).replace("Rs. ", ""),
+            ],
         )
 
     gst_breakdown = pricing.get("gst_breakdown") or {}

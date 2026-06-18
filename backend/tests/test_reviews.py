@@ -24,7 +24,7 @@ async def test_property_reviews_aggregate(client, guest_token, seed_data, mock_d
             "final_price_per_night": 3500.0,
             "price_breakdown": [],
             "subtotal": 7000.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 840.0,
             "total_price": 7840.0,
             "offer_code": None,
@@ -74,7 +74,7 @@ async def test_eligible_review_for_room(client, guest_token, seed_data, mock_db)
             "final_price_per_night": 3500.0,
             "price_breakdown": [],
             "subtotal": 7000.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 840.0,
             "total_price": 7840.0,
             "offer_code": None,
@@ -137,7 +137,7 @@ async def test_review_after_completed_booking(client, guest_token, seed_data, mo
             "final_price_per_night": 3500.0,
             "price_breakdown": [],
             "subtotal": 7000.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 840.0,
             "total_price": 7840.0,
             "offer_code": None,
@@ -199,7 +199,7 @@ async def test_duplicate_review_fails(client, guest_token, seed_data, mock_db):
             "final_price_per_night": 3500.0,
             "price_breakdown": [],
             "subtotal": 7000.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 840.0,
             "total_price": 7840.0,
             "offer_code": None,
@@ -219,12 +219,18 @@ async def test_duplicate_review_fails(client, guest_token, seed_data, mock_db):
         "would_recommend": True,
         "photos": [],
     }
-    await client.post("/api/reviews", headers={"Authorization": f"Bearer {guest_token}"}, json=payload)
-    dup = await client.post("/api/reviews", headers={"Authorization": f"Bearer {guest_token}"}, json=payload)
+    await client.post(
+        "/api/reviews", headers={"Authorization": f"Bearer {guest_token}"}, json=payload
+    )
+    dup = await client.post(
+        "/api/reviews", headers={"Authorization": f"Bearer {guest_token}"}, json=payload
+    )
     assert dup.status_code == 409
 
 
-async def test_host_can_respond_to_review(client, host_token, guest_token, seed_data, mock_db):
+async def test_host_can_respond_to_review(
+    client, host_token, guest_token, seed_data, mock_db
+):
     check_in = date.today() - timedelta(days=25)
     check_out = check_in + timedelta(days=2)
     booking = await mock_db["bookings"].insert_one(
@@ -243,7 +249,7 @@ async def test_host_can_respond_to_review(client, host_token, guest_token, seed_
             "final_price_per_night": 3500.0,
             "price_breakdown": [],
             "subtotal": 7000.0,
-            "gst_rate": 0.12,
+            "gst_rate": 0.05,
             "gst_amount": 840.0,
             "total_price": 7840.0,
             "offer_code": None,
@@ -277,7 +283,9 @@ async def test_host_can_respond_to_review(client, host_token, guest_token, seed_
     assert res.json()["host_response"] == "Thank you for staying with us!"
 
 
-async def test_rating_average_updates_on_review(client, guest_token, seed_data, mock_db):
+async def test_rating_average_updates_on_review(
+    client, guest_token, seed_data, mock_db
+):
     check_in = date.today() - timedelta(days=15)
     check_out = check_in + timedelta(days=2)
     booking = await mock_db["bookings"].insert_one(

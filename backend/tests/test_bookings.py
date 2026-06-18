@@ -105,7 +105,8 @@ async def test_booking_gst_calculation_correct(client, guest_token, seed_data):
 
 
 async def test_booking_total_price_correct(client, guest_token, seed_data):
-    check_in = date.today() + timedelta(days=50)
+    # Tuesday in a non-peak month, far enough for early-bird but no weekend surcharge.
+    check_in = date(2027, 6, 8)
     check_out = check_in + timedelta(days=1)
     res = await client.post(
         "/api/bookings",
@@ -123,7 +124,9 @@ async def test_booking_total_price_correct(client, guest_token, seed_data):
     assert data["guest_platform_fee"] == round(data["subtotal"] * 0.10, 2)
     assert data["host_platform_fee"] == round(data["subtotal"] * 0.03, 2)
     assert data["host_payout"] == round(data["subtotal"] - data["host_platform_fee"], 2)
-    assert data["total_price"] == round(data["subtotal"] + data["guest_platform_fee"], 2)
+    assert data["total_price"] == round(
+        data["subtotal"] + data["guest_platform_fee"], 2
+    )
 
 
 async def test_waitlist_promoted_on_cancel(client, guest_token, seed_data):
