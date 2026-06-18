@@ -78,24 +78,21 @@ export default function BookingCard({
         )}
 
         <div className="booking-widget__inputs">
-          <div
-            onMouseEnter={() => setShowCalendar(true)}
-            onFocus={() => setShowCalendar(true)}
-          >
-            <DateRangePicker
-              variant="booking"
-              start={checkIn}
-              end={checkOut}
-              onChange={({ start, end }) => {
-                setCheckIn(start);
-                setCheckOut(end);
-                setShowCalendar(true);
-              }}
-              startLabel="Check-in"
-              endLabel="Checkout"
-            />
-          </div>
-          <AvailabilityCalendar roomId={roomId} open={showCalendar} />
+          <DateRangePicker
+            variant="booking"
+            start={checkIn}
+            end={checkOut}
+            onChange={({ start, end }) => {
+              setCheckIn(start);
+              setCheckOut(end);
+            }}
+            onOpenChange={setShowCalendar}
+            startLabel="Check-in"
+            endLabel="Checkout"
+          />
+          {showCalendar && (
+            <AvailabilityCalendar roomId={roomId} open={showCalendar} />
+          )}
           <label className="booking-widget__guests">
             <span className="booking-widget__label">Guests</span>
             <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">

@@ -15,7 +15,10 @@ export default function PriceBreakdown({ pricing, compact = false }) {
   return (
     <div className={`price-breakdown ${compact ? 'price-breakdown--compact' : ''}`} data-testid="price-breakdown">
       {items.map((item, i) => (
-        <div key={i} className={`price-breakdown__row price-breakdown__row--${item.type}`}>
+        <div
+          key={i}
+          className={`price-breakdown__row price-breakdown__row--${item.type}${item.multiRoom ? ' price-breakdown__row--multi-room-base' : ''}`}
+        >
           <span>{item.label}</span>
           <span className={item.amount < 0 ? 'price-breakdown__discount' : ''}>
             {item.amount < 0 ? '-' : ''}

@@ -4,8 +4,8 @@ import { Minus, Plus, Search, X } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 import LocationPicker from './LocationPicker';
 import {
-  applyLocationToParams,
   buildLocationSelection,
+  commitSearchParams,
   readLocationFromParams,
 } from '../utils/searchState';
 import { formatRangeLabel } from '../utils/dates';
@@ -46,21 +46,17 @@ export default function MobileSearchModal({ open, onClose }) {
 
   const applySearch = () => {
     const location = buildLocationSelection({ where, locationMode, coords, searchParams });
-    const next = new URLSearchParams(searchParams);
-    applyLocationToParams(next, location);
-    if (checkIn) next.set('check_in', checkIn);
-    else next.delete('check_in');
-    if (checkOut) next.set('check_out', checkOut);
-    else next.delete('check_out');
-    if (guests && guests !== 2) next.set('guests', String(guests));
-    else next.delete('guests');
-
     onClose();
-    if (pathname !== '/') {
-      navigate({ pathname: '/', search: next.toString() });
-    } else {
-      setSearchParams(next);
-    }
+    commitSearchParams({
+      navigate,
+      pathname,
+      searchParams,
+      setSearchParams,
+      location,
+      checkIn,
+      checkOut,
+      guests: String(guests),
+    });
   };
 
   const clearAll = () => {

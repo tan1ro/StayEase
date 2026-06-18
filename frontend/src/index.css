@@ -3299,6 +3299,18 @@ html.dark .host-chip--gold {
   margin-bottom: 1rem;
   position: relative;
 }
+
+.booking-widget__inputs .availability-calendar {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  margin-top: 0;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
 .booking-widget__dates {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -15168,6 +15180,11 @@ html.dark .host-editor__preview {
 
 .price-breakdown__discount {
   color: var(--success);
+}
+
+.price-breakdown__row--multi-room-base {
+  padding-left: 0.5rem;
+  font-size: 0.92em;
 }
 
 .gst-breakdown__row {

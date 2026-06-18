@@ -83,15 +83,38 @@ export function buildLocationSelection({ where, locationMode, coords, searchPara
   return { type: 'search', search: trimmed, label: trimmed };
 }
 
-export function syncSearchParams(searchParams, setSearchParams, { location, checkIn, checkOut, guests }) {
+export function buildSearchParams(searchParams, { location, checkIn, checkOut, guests }) {
   const next = new URLSearchParams(searchParams);
   applyLocationToParams(next, location);
   if (checkIn) next.set('check_in', checkIn);
   else next.delete('check_in');
   if (checkOut) next.set('check_out', checkOut);
   else next.delete('check_out');
-  if (guests && guests !== '2') next.set('guests', guests);
+  if (guests && String(guests) !== '2') next.set('guests', String(guests));
   else next.delete('guests');
+  return next;
+}
+
+export function syncSearchParams(searchParams, setSearchParams, updates) {
+  setSearchParams(buildSearchParams(searchParams, updates));
+}
+
+export function commitSearchParams({
+  navigate,
+  pathname,
+  searchParams,
+  setSearchParams,
+  location,
+  checkIn,
+  checkOut,
+  guests,
+}) {
+  const next = buildSearchParams(searchParams, { location, checkIn, checkOut, guests });
+  const search = next.toString();
+  if (pathname !== '/') {
+    navigate({ pathname: '/', search });
+    return;
+  }
   setSearchParams(next);
 }
 

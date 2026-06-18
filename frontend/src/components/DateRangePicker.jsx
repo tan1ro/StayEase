@@ -26,6 +26,7 @@ export default function DateRangePicker({
   start = '',
   end = '',
   onChange,
+  onOpenChange,
   min,
   max,
   variant = 'input',
@@ -47,6 +48,10 @@ export default function DateRangePicker({
   useEffect(() => {
     if (start) setMonth(start.slice(0, 7));
   }, [start]);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) {

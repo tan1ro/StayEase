@@ -23,6 +23,7 @@ import {
   validateOffer,
 } from '../../api/api';
 import { useMultiRoomPricing } from '../../hooks/useMultiRoomPricing';
+import { sumBookingPricings } from '../../utils/multiRoomPricing';
 import { useAuth } from '../../context/AuthContext';
 import { isRoomAvailableForDates } from '../../utils/adjacentRooms';
 import { addDaysISO, todayISO, BOOKING_CALENDAR_MONTHS } from '../../utils/dates';
@@ -144,11 +145,17 @@ export default function BookRoom() {
     propertyRooms.length > 0 && activeRoomIds.length === 0
   );
 
+  const selectedRooms = useMemo(
+    () => propertyRooms.filter((item) => activeRoomIds.includes(item._id)),
+    [propertyRooms, activeRoomIds],
+  );
+
   const { pricing, loading: pricingLoading, error: pricingError, nights } = useMultiRoomPricing(
     activeRoomIds,
     dateValidationError ? '' : checkIn,
     dateValidationError ? '' : checkOut,
     activeOfferCode,
+    selectedRooms,
   );
 
   useEffect(() => {
@@ -173,11 +180,6 @@ export default function BookRoom() {
 
   const photo = room?.photos?.find((p) => p.is_primary) || room?.photos?.[0];
   const location = [room?.location?.area, room?.location?.city].filter(Boolean).join(', ');
-
-  const selectedRooms = useMemo(
-    () => propertyRooms.filter((item) => activeRoomIds.includes(item._id)),
-    [propertyRooms, activeRoomIds],
-  );
 
   const selectedRoomLabel = useMemo(() => {
     if (selectedRooms.length > 1) {
@@ -376,22 +378,14 @@ export default function BookRoom() {
   if (loading) return <Spinner label="Loading booking..." />;
   if (!room) return <ErrorMessage message={error || 'Room not found'} />;
 
-  const bookingPricing = confirmedPricing || (confirmedBookings?.length ? {
-    subtotal: confirmedBookings.reduce((sum, booking) => sum + (booking.subtotal || 0), 0),
-    total_price: confirmedBookings.reduce((sum, booking) => sum + (booking.total_price || 0), 0),
-    gst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0),
-    gst_rate: confirmedBookings[0]?.gst_rate,
-    price_breakdown: confirmedBookings[0]?.price_breakdown,
-    total_nights: confirmedBookings[0]?.total_nights,
-    final_price_per_night: confirmedBookings[0]?.final_price_per_night,
-    guest_platform_fee: confirmedBookings.reduce((sum, booking) => sum + (booking.guest_platform_fee || 0), 0),
-    gst_breakdown: confirmedBookings[0]?.gst_amount ? {
-      cgst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0) / 2,
-      sgst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0) / 2,
-      cgst_rate: (confirmedBookings[0]?.gst_rate || 0) / 2,
-      sgst_rate: (confirmedBookings[0]?.gst_rate || 0) / 2,
-    } : undefined,
-  } : null);
+  const bookingPricing = confirmedPricing || (confirmedBookings?.length
+    ? sumBookingPricings(
+      confirmedBookings,
+      (_, index) => selectedRooms[index]?.room_number
+        || confirmedBookings[index]?.preferred_room_number
+        || `Room ${index + 1}`,
+    )
+    : null);
 
   if (confirmedBookings?.length) {
     const primaryBooking = confirmedBookings[0];

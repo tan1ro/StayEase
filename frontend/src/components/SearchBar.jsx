@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 import LocationPicker from './LocationPicker';
 import { Icon, ICON } from './ui/Icon';
 import {
   buildLocationSelection,
+  commitSearchParams,
   readLocationFromParams,
-  syncSearchParams,
 } from '../utils/searchState';
 
 export default function SearchBar({ onSearch, compact = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const initialLocation = readLocationFromParams(searchParams);
   const [where, setWhere] = useState(initialLocation.label);
   const [locationMode, setLocationMode] = useState(initialLocation.mode);
@@ -31,11 +33,17 @@ export default function SearchBar({ onSearch, compact = false }) {
     setGuests(searchParams.get('guests') || '2');
   }, [searchParams]);
 
-  const syncParams = (location, dates = {}) => {
+  const applySearch = (location, dates = {}, { commit = false } = {}) => {
     const ci = dates.checkIn ?? checkIn;
     const co = dates.checkOut ?? checkOut;
     const g = dates.guests ?? guests;
-    syncSearchParams(searchParams, setSearchParams, {
+    if (pathname !== '/' && !commit) return;
+
+    commitSearchParams({
+      navigate,
+      pathname,
+      searchParams,
+      setSearchParams,
       location,
       checkIn: ci,
       checkOut: co,
@@ -56,14 +64,14 @@ export default function SearchBar({ onSearch, compact = false }) {
       setWhere(label);
       setLocationMode('nearby');
       setCoords({ lat: selection.lat, lng: selection.lng });
-      syncParams(selection);
+      applySearch(selection);
       return;
     }
     if (selection.type === 'city') {
       setWhere(selection.label);
       setLocationMode('city');
       setCoords({ lat: '', lng: '' });
-      syncParams(selection);
+      applySearch(selection);
     }
   };
 
@@ -74,26 +82,35 @@ export default function SearchBar({ onSearch, compact = false }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    syncParams(buildLocationSelection({ where, locationMode, coords, searchParams }));
+    applySearch(
+      buildLocationSelection({ where, locationMode, coords, searchParams }),
+      {},
+      { commit: true },
+    );
   };
 
   const currentLocationSelection = () =>
     buildLocationSelection({ where, locationMode, coords, searchParams });
 
-  const whereDisplay =
-    locationMode === 'nearby' ? (where || 'Nearby') : where || 'Search destinations';
-
   if (compact) {
     return (
-      <form className="search-pill search-pill--compact hide-mobile" onSubmit={handleSubmit}>
-        <button
-          type="button"
-          className="search-pill__segment"
-          onClick={() => document.getElementById('where-input-compact')?.focus()}
+      <form
+        className={`search-pill search-pill--compact hide-mobile ${whereActive ? 'search-pill--where-active' : ''}`}
+        onSubmit={handleSubmit}
+      >
+        <div
+          className={`search-pill__segment search-pill__segment--grow search-pill__segment--where ${whereActive ? 'search-pill__segment--active' : ''}`}
         >
-          <span className="search-pill__label">Anywhere</span>
-          <span className="search-pill__value">{whereDisplay}</span>
-        </button>
+          <LocationPicker
+            compact
+            value={where}
+            mode={locationMode}
+            inputId="where-input-compact"
+            onSelect={handleLocationSelect}
+            onQueryChange={handleLocationQueryChange}
+            onOpenChange={setWhereActive}
+          />
+        </div>
         <span className="search-pill__divider" />
         <DateRangePicker
           variant="compact"
@@ -102,14 +119,25 @@ export default function SearchBar({ onSearch, compact = false }) {
           onChange={({ start, end }) => {
             setCheckIn(start);
             setCheckOut(end);
-            syncParams(currentLocationSelection(), { checkIn: start, checkOut: end });
+            applySearch(currentLocationSelection(), { checkIn: start, checkOut: end });
           }}
         />
         <span className="search-pill__divider" />
-        <button type="button" className="search-pill__segment">
-          <span className="search-pill__label">Add guests</span>
-          <span className="search-pill__value">{guests} guest{guests !== '1' ? 's' : ''}</span>
-        </button>
+        <div className="search-pill__segment search-pill__segment--guests">
+          <label className="search-pill__label" htmlFor="guests-input-compact">
+            Add guests
+          </label>
+          <input
+            id="guests-input-compact"
+            type="number"
+            min="1"
+            max="10"
+            className="search-pill__input"
+            placeholder={`${guests} guest${guests !== '1' ? 's' : ''}`}
+            value={guests}
+            onChange={(e) => setGuests(e.target.value)}
+          />
+        </div>
         <button type="submit" className="search-pill__btn" aria-label="Search">
           <Icon icon={Search} size={ICON.sm} />
         </button>
@@ -141,7 +169,7 @@ export default function SearchBar({ onSearch, compact = false }) {
         onChange={({ start, end }) => {
           setCheckIn(start);
           setCheckOut(end);
-          syncParams(currentLocationSelection(), { checkIn: start, checkOut: end });
+          applySearch(currentLocationSelection(), { checkIn: start, checkOut: end });
         }}
       />
       <span className="search-pill__divider" />
