@@ -7,7 +7,7 @@ import {
   getSunlightTraits,
   groupRoomsByFloor,
 } from '../constants/roomPlacement';
-import { canToggleRoom, isRoomAvailableForDates, resolveAvailableSelection, toggleRoomSelection } from '../utils/adjacentRooms';
+import { canToggleRoom, getRoomPickerStatus, isRoomAvailableForDates, resolveAvailableSelection, toggleRoomSelection } from '../utils/adjacentRooms';
 import RoomPlacementInfo from './RoomPlacementInfo';
 import Spinner from './Spinner';
 
@@ -30,15 +30,19 @@ function RoomTile({
   const { sunrise, sunset } = getSunlightTraits(room.facing_side);
   const view = formatViewType(room.view_type);
   const ViewIcon = viewIcon(room.view_type);
-  const isBooked = !isRoomAvailableForDates(room);
+  const status = getRoomPickerStatus(room);
+  const isBooked = status === 'booked';
+  const isUnpublished = status === 'unpublished';
+  const isUnavailable = isBooked || isUnpublished;
   const query = new URLSearchParams({ check_in: checkIn, check_out: checkOut });
 
   const tileClass = [
     'room-floor-picker__tile',
     isBooked && 'room-floor-picker__tile--booked',
-    !isBooked && isSelected && 'room-floor-picker__tile--selected',
-    !isSelected && !isBooked && canSelect && 'room-floor-picker__tile--available',
-    !isSelected && !isBooked && !canSelect && multiSelect && 'room-floor-picker__tile--blocked',
+    isUnpublished && 'room-floor-picker__tile--unpublished',
+    !isUnavailable && isSelected && 'room-floor-picker__tile--selected',
+    !isUnavailable && !isSelected && canSelect && 'room-floor-picker__tile--available',
+    !isSelected && !isUnavailable && !canSelect && multiSelect && 'room-floor-picker__tile--blocked',
   ].filter(Boolean).join(' ');
 
   const content = (
@@ -61,19 +65,34 @@ function RoomTile({
           </>
         ) : (
           <span className="room-floor-picker__tile-view-text room-floor-picker__tile-view-text--empty" aria-hidden="true">
-            &nbsp;
+            Standard
           </span>
         )}
+      </span>
+      <span
+        className={[
+          'room-floor-picker__tile-badge',
+          isBooked && 'room-floor-picker__tile-badge--booked',
+          isUnpublished && 'room-floor-picker__tile-badge--unpublished',
+          !isUnavailable && 'room-floor-picker__tile-badge--empty',
+        ].filter(Boolean).join(' ')}
+        aria-hidden={!isUnavailable}
+      >
+        {isUnpublished ? 'Not available' : isBooked ? 'Booked' : ''}
       </span>
     </>
   );
 
-  if (isBooked) {
+  if (isUnavailable) {
     return (
       <div
         className={tileClass}
         aria-disabled="true"
-        title={`Room ${room.room_number} — already booked for these dates`}
+        title={
+          isUnpublished
+            ? `Room ${room.room_number} — not available for booking`
+            : `Room ${room.room_number} — already booked for these dates`
+        }
       >
         {content}
       </div>
@@ -93,7 +112,7 @@ function RoomTile({
             ? `Room ${room.room_number} — selected`
             : canSelect
               ? `Add room ${room.room_number}`
-              : `Room ${room.room_number} — select rooms next to each other on the same floor`
+              : `Room ${room.room_number} — not available with your current selection`
         }
       >
         {content}
@@ -130,6 +149,57 @@ function RoomTile({
     >
       {content}
     </Link>
+  );
+}
+
+function FloorPickerMap({
+  floorGroups,
+  maxRoomsPerFloor,
+  activeSelectedIds,
+  multiSelect,
+  checkIn,
+  checkOut,
+  onToggleRoom,
+  onSelectRoom,
+  getCanSelect = (room) => canToggleRoom(room, activeSelectedIds),
+}) {
+  return (
+    <div
+      className="room-floor-picker__map-body"
+      style={{ '--tile-columns': maxRoomsPerFloor }}
+    >
+      <div className="room-floor-picker__floors">
+        {floorGroups.map(({ floor, label }) => (
+          <div key={floor} className="room-floor-picker__floor">
+            <span className="room-floor-picker__floor-num">{floor <= 0 ? 'G' : floor}</span>
+            <span className="room-floor-picker__floor-label">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="room-floor-picker__map-scroll">
+        <div className="room-floor-picker__map">
+          {floorGroups.map(({ floor, rooms }) => (
+            <div key={floor} className="room-floor-picker__row">
+              <div className="room-floor-picker__tiles">
+                {rooms.map((room) => (
+                  <RoomTile
+                    key={room._id}
+                    room={room}
+                    isSelected={activeSelectedIds.includes(room._id)}
+                    canSelect={getCanSelect(room)}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                    onToggleRoom={onToggleRoom}
+                    onSelectRoom={onSelectRoom}
+                    multiSelect={multiSelect}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -174,13 +244,12 @@ export default function RoomFloorPicker({
     return propertyRooms;
   }, [propertyRooms]);
 
-  const activeSelectedIds = selectedRoomIds.length ? selectedRoomIds : (roomId ? [roomId] : []);
+  const activeSelectedIds = selectedRoomIds;
 
   useEffect(() => {
     if (!propertyRooms.length || !onChangeSelectedRoomIds) return;
-    const currentIds = selectedRoomIds.length ? selectedRoomIds : (roomId ? [roomId] : []);
-    const { ids, notice } = resolveAvailableSelection(currentIds, propertyRooms, roomId);
-    if (ids.join(',') !== currentIds.join(',')) {
+    const { ids, notice } = resolveAvailableSelection(selectedRoomIds, propertyRooms, roomId);
+    if (ids.join(',') !== selectedRoomIds.join(',')) {
       onChangeSelectedRoomIds(ids);
     }
     setSelectionNotice(notice);
@@ -191,10 +260,8 @@ export default function RoomFloorPicker({
   }, [allRooms, onPropertyRoomsChange]);
 
   const selectedRoom = useMemo(
-    () => allRooms.find((r) => activeSelectedIds.includes(r._id))
-      || allRooms.find((r) => r._id === roomId)
-      || currentRoom,
-    [allRooms, activeSelectedIds, roomId, currentRoom],
+    () => allRooms.find((r) => activeSelectedIds.includes(r._id)) || null,
+    [allRooms, activeSelectedIds],
   );
 
   const selectedRooms = useMemo(
@@ -220,10 +287,6 @@ export default function RoomFloorPicker({
       return;
     }
     const next = toggleRoomSelection(room, activeSelectedIds, allRooms);
-    if (next.join(',') === activeSelectedIds.join(',')) {
-      setSelectionNotice('Choose rooms next to each other on the same floor.');
-      return;
-    }
     setSelectionNotice('');
     onChangeSelectedRoomIds(next);
   };
@@ -248,13 +311,49 @@ export default function RoomFloorPicker({
 
   if (openRoomCount === 0) {
     return (
-      <p className="room-floor-picker__hint">
-        All rooms are booked for these dates. Try different dates or join the waitlist below.
-      </p>
+      <section className="room-floor-picker" aria-label="Property room map">
+        <div className="room-floor-picker__header">
+          <h3>Choose your room{multiSelect ? 's' : ''}</h3>
+          <p className="room-floor-picker__lead room-floor-picker__lead--warn">
+            All rooms are booked for your selected dates. Pick the next available stay above to continue.
+          </p>
+        </div>
+        <div className="room-floor-picker__compass" aria-hidden="true">
+          <span className="room-floor-picker__compass-east">
+            <Sunrise size={18} />
+            Sunrise
+          </span>
+          <span className="room-floor-picker__compass-center">
+            <Eye size={16} />
+            View direction
+          </span>
+          <span className="room-floor-picker__compass-west">
+            <Sunset size={18} />
+            Sunset
+          </span>
+        </div>
+        <FloorPickerMap
+          floorGroups={floorGroups}
+          maxRoomsPerFloor={maxRoomsPerFloor}
+          activeSelectedIds={activeSelectedIds}
+          multiSelect={false}
+          checkIn={checkIn}
+          checkOut={checkOut}
+          getCanSelect={() => false}
+        />
+        <ul className="room-floor-picker__legend">
+          <li>
+            <span className="room-floor-picker__legend-swatch room-floor-picker__legend-swatch--booked" />
+            Booked
+          </li>
+          <li>
+            <span className="room-floor-picker__legend-swatch room-floor-picker__legend-swatch--unpublished" />
+            Not available
+          </li>
+        </ul>
+      </section>
     );
   }
-
-  if (!selectedRoom) return null;
 
   if (!hasMultipleRooms) {
     const onlyRoom = allRooms[0];
@@ -265,11 +364,6 @@ export default function RoomFloorPicker({
         </p>
       );
     }
-    return (
-      <section className="room-floor-picker room-floor-picker--single" aria-label="Your room">
-        <RoomPlacementInfo room={onlyRoom} title="Your room" />
-      </section>
-    );
   }
 
   return (
@@ -277,11 +371,9 @@ export default function RoomFloorPicker({
       <div className="room-floor-picker__header">
         <h3>Choose your room{multiSelect ? 's' : ''}</h3>
         <p className="room-floor-picker__lead">
-          {multiSelect
-            ? 'Select one or more adjoining rooms on the same floor — ideal for families and group stays.'
-            : 'Pick a room like selecting seats — compare floor, view, and sunrise or sunset light.'}
+          Pick one or more open rooms — tap a room to select or deselect.
         </p>
-        {multiSelect && activeSelectedIds.length > 0 && (
+        {activeSelectedIds.length > 0 && (
           <p className="room-floor-picker__selection-count">
             {activeSelectedIds.length} room{activeSelectedIds.length !== 1 ? 's' : ''} selected
             {selectedRooms.length > 1
@@ -311,36 +403,16 @@ export default function RoomFloorPicker({
         </span>
       </div>
 
-      <div className="room-floor-picker__map-scroll">
-        <div
-          className="room-floor-picker__map"
-          style={{ '--tile-columns': maxRoomsPerFloor }}
-        >
-          {floorGroups.map(({ floor, label, rooms }) => (
-            <div key={floor} className="room-floor-picker__row">
-              <div className="room-floor-picker__floor">
-                <span className="room-floor-picker__floor-num">{floor <= 0 ? 'G' : floor}</span>
-                <span className="room-floor-picker__floor-label">{label}</span>
-              </div>
-              <div className="room-floor-picker__tiles">
-                {rooms.map((room) => (
-                  <RoomTile
-                    key={room._id}
-                    room={room}
-                    isSelected={activeSelectedIds.includes(room._id)}
-                    canSelect={canToggleRoom(room, activeSelectedIds, allRooms)}
-                    checkIn={checkIn}
-                    checkOut={checkOut}
-                    onToggleRoom={handleToggleRoom}
-                    onSelectRoom={onSelectRoom}
-                    multiSelect={multiSelect}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <FloorPickerMap
+        floorGroups={floorGroups}
+        maxRoomsPerFloor={maxRoomsPerFloor}
+        activeSelectedIds={activeSelectedIds}
+        multiSelect={multiSelect}
+        checkIn={checkIn}
+        checkOut={checkOut}
+        onToggleRoom={handleToggleRoom}
+        onSelectRoom={onSelectRoom}
+      />
 
       <ul className="room-floor-picker__legend">
         <li>
@@ -355,12 +427,10 @@ export default function RoomFloorPicker({
           <span className="room-floor-picker__legend-swatch room-floor-picker__legend-swatch--booked" />
           Booked
         </li>
-        {multiSelect && (
-          <li>
-            <span className="room-floor-picker__legend-swatch room-floor-picker__legend-swatch--blocked" />
-            Not adjacent
-          </li>
-        )}
+        <li>
+          <span className="room-floor-picker__legend-swatch room-floor-picker__legend-swatch--unpublished" />
+          Not available
+        </li>
         <li>
           <Sunrise size={14} aria-hidden />
           Sunrise side
@@ -371,15 +441,17 @@ export default function RoomFloorPicker({
         </li>
       </ul>
 
-      <RoomPlacementInfo
-        room={selectedRoom}
-        compact
-        title={
-          selectedRooms.length > 1
-            ? `Selected rooms (${selectedRooms.map((item) => item.room_number).join(', ')})`
-            : 'Selected room details'
-        }
-      />
+      {selectedRoom && (
+        <RoomPlacementInfo
+          room={selectedRoom}
+          compact
+          title={
+            selectedRooms.length > 1
+              ? `Selected rooms (${selectedRooms.map((item) => item.room_number).join(', ')})`
+              : 'Selected room details'
+          }
+        />
+      )}
     </section>
   );
 }

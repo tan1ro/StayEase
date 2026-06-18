@@ -141,6 +141,7 @@ export const roomsApi = {
   list: (params) => api.get('/api/rooms', { params }),
   get: (id) => api.get(`/api/rooms/${id}`),
   alternatives: (id, params) => api.get(`/api/rooms/${id}/alternatives`, { params }),
+  nextAvailable: (id, params) => api.get(`/api/rooms/${id}/next-available`, { params }),
   create: (data) => api.post('/api/rooms', data),
   update: (id, data) => api.patch(`/api/rooms/${id}`, data),
   remove: (id) => api.delete(`/api/rooms/${id}`),

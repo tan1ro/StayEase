@@ -4496,10 +4496,68 @@ html.dark .filter-group__label {
 }
 
 .book-room__section-lead {
-  margin: 0 0 1rem;
+  margin: 0 0 0.75rem;
   font-size: 0.9rem;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.book-room__multi-room-toggle {
+  margin: 0 0 1rem;
+}
+
+.next-available-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: var(--radius-md, 10px);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface, #fff));
+}
+
+.next-available-dates--loading,
+.next-available-dates--empty {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.next-available-dates__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  flex: 1 1 16rem;
+}
+
+.next-available-dates__icon {
+  flex-shrink: 0;
+  color: var(--primary);
+  margin-top: 0.1rem;
+}
+
+.next-available-dates__message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
+.next-available-dates__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.next-available-dates__apply {
+  flex-shrink: 0;
+}
+
+.room-floor-picker__lead--warn {
+  color: var(--danger, #dc2626);
 }
 
 .book-room__guests-hint {
@@ -4789,7 +4847,7 @@ html.dark .filter-group__label {
   border-radius: var(--radius);
   background: var(--surface-2, var(--bg));
   min-width: 0;
-  overflow: hidden;
+  --room-floor-width: 6.875rem;
 }
 
 .room-floor-picker--single {
@@ -4821,6 +4879,8 @@ html.dark .filter-group__label {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  margin-left: calc(var(--room-floor-width) + 0.75rem);
+  width: calc(100% - var(--room-floor-width) - 0.75rem);
   padding: 0.65rem 1rem;
   border-radius: var(--radius);
   background: linear-gradient(
@@ -4856,11 +4916,25 @@ html.dark .filter-group__label {
   justify-self: end;
 }
 
+.room-floor-picker__map-body {
+  display: grid;
+  grid-template-columns: var(--room-floor-width) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.room-floor-picker__floors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .room-floor-picker__map-scroll {
   overflow-x: auto;
   min-width: 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+  border-radius: var(--radius);
 }
 
 .room-floor-picker__map {
@@ -4872,10 +4946,7 @@ html.dark .filter-group__label {
 }
 
 .room-floor-picker__row {
-  display: grid;
-  grid-template-columns: 6.875rem minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: stretch;
+  min-height: var(--room-tile-height, 7.85rem);
 }
 
 .room-floor-picker__floor {
@@ -4889,7 +4960,8 @@ html.dark .filter-group__label {
   background: var(--surface, #fff);
   border: 1px solid var(--border);
   text-align: center;
-  min-height: var(--room-tile-height, 6.5rem);
+  min-height: var(--room-tile-height, 7.85rem);
+  height: 100%;
 }
 
 .room-floor-picker__floor-num {
@@ -4914,21 +4986,23 @@ html.dark .filter-group__label {
     var(--tile-columns, 4) * var(--room-tile-size, 5.75rem)
     + (var(--tile-columns, 4) - 1) * 0.5rem
   );
+  --room-tile-height: 7.85rem;
 }
 
 .room-floor-picker__tile {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 1.05rem 0.9rem 1.125rem 2rem 1.05rem;
+  align-content: start;
   align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
+  justify-items: center;
+  gap: 0.08rem;
   width: var(--room-tile-size, 5.75rem);
-  height: var(--room-tile-height, 6.5rem);
+  height: var(--room-tile-height, 7.85rem);
   min-width: var(--room-tile-size, 5.75rem);
   max-width: var(--room-tile-size, 5.75rem);
-  min-height: var(--room-tile-height, 6.5rem);
-  max-height: var(--room-tile-height, 6.5rem);
-  padding: 0.45rem 0.35rem;
+  min-height: var(--room-tile-height, 7.85rem);
+  max-height: var(--room-tile-height, 7.85rem);
+  padding: 0.4rem 0.3rem 0.35rem;
   border-radius: 8px;
   border: 2px solid var(--border);
   background: var(--surface, #fff);
@@ -4941,7 +5015,7 @@ html.dark .filter-group__label {
   font: inherit;
 }
 
-.room-floor-picker__tile:hover:not(.room-floor-picker__tile--booked):not(.room-floor-picker__tile--selected) {
+.room-floor-picker__tile:hover:not(.room-floor-picker__tile--booked):not(.room-floor-picker__tile--unpublished):not(.room-floor-picker__tile--selected) {
   border-color: #16a34a;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px color-mix(in srgb, #16a34a 20%, transparent);
@@ -4982,17 +5056,76 @@ html.dark .filter-group__label {
   color: color-mix(in srgb, #991b1b 70%, var(--text-secondary));
 }
 
+.room-floor-picker__tile--unpublished {
+  border-color: color-mix(in srgb, var(--text-secondary) 35%, var(--border));
+  background: color-mix(in srgb, var(--text-secondary) 10%, var(--surface-2, #f3f4f6));
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
+.room-floor-picker__tile--unpublished .room-floor-picker__tile-number {
+  color: var(--text-secondary);
+}
+
+.room-floor-picker__tile--unpublished .room-floor-picker__tile-price,
+.room-floor-picker__tile--unpublished .room-floor-picker__tile-view {
+  color: var(--text-muted, var(--text-secondary));
+  opacity: 0.85;
+}
+
+.room-floor-picker__tile-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.05rem;
+  padding: 0.08rem 0.25rem;
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.room-floor-picker__tile-badge--booked {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: #991b1b;
+}
+
+.room-floor-picker__tile-badge--unpublished {
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  color: var(--text-secondary);
+}
+
+.room-floor-picker__tile-badge--empty {
+  visibility: hidden;
+}
+
 .room-floor-picker__tile-number {
-  font-size: 0.95rem;
+  width: 100%;
+  font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .room-floor-picker__tile-price {
-  font-size: 0.68rem;
+  width: 100%;
+  font-size: 0.66rem;
   color: var(--text-secondary);
   line-height: 1.1;
   white-space: nowrap;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .room-floor-picker__tile-light {
@@ -5000,7 +5133,9 @@ html.dark .filter-group__label {
   align-items: center;
   justify-content: center;
   gap: 0.15rem;
-  min-height: 1rem;
+  width: 100%;
+  height: 1.125rem;
+  min-height: 1.125rem;
   color: #ea580c;
 }
 
@@ -5014,11 +5149,13 @@ html.dark .filter-group__label {
   justify-content: center;
   gap: 0.15rem;
   width: 100%;
+  height: 2rem;
   min-height: 2rem;
-  max-height: 2.25rem;
-  font-size: 0.65rem;
+  max-height: 2rem;
+  font-size: 0.62rem;
   color: var(--text-muted, var(--text-secondary));
   line-height: 1.1;
+  overflow: hidden;
 }
 
 .room-floor-picker__tile-view-text {
@@ -5034,7 +5171,7 @@ html.dark .filter-group__label {
 }
 
 .room-floor-picker__tile-view-text--empty {
-  opacity: 0;
+  visibility: hidden;
 }
 
 .room-floor-picker__legend {
@@ -5078,6 +5215,12 @@ html.dark .filter-group__label {
   background: color-mix(in srgb, #ef4444 18%, var(--surface-2, #e5e7eb));
 }
 
+.room-floor-picker__legend-swatch--unpublished {
+  border-color: color-mix(in srgb, var(--text-secondary) 40%, var(--border));
+  background: color-mix(in srgb, var(--text-secondary) 14%, var(--surface-2, #e5e7eb));
+  opacity: 0.75;
+}
+
 .room-floor-picker__legend-swatch--blocked {
   border-color: var(--border);
   background: color-mix(in srgb, var(--text-secondary) 12%, var(--surface-2, #e5e7eb));
@@ -5111,15 +5254,29 @@ html.dark .filter-group__label {
 }
 
 @media (max-width: 640px) {
-  .room-floor-picker__row {
-    grid-template-columns: 1fr;
+  .room-floor-picker {
+    --room-floor-width: 4.75rem;
+  }
+
+  .room-floor-picker__compass {
+    margin-left: calc(var(--room-floor-width) + 0.5rem);
+    width: calc(100% - var(--room-floor-width) - 0.5rem);
+  }
+
+  .room-floor-picker__map-body {
+    gap: 0.5rem;
   }
 
   .room-floor-picker__floor {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    min-height: auto;
+    padding: 0.35rem;
+  }
+
+  .room-floor-picker__floor-num {
+    font-size: 1rem;
+  }
+
+  .room-floor-picker__floor-label {
+    font-size: 0.62rem;
   }
 
   .room-floor-picker__tiles {
@@ -5127,7 +5284,8 @@ html.dark .filter-group__label {
   }
 
   .room-floor-picker__map {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
   }
 
   .room-placement__grid {
@@ -9761,6 +9919,20 @@ button.host-drawer__icon-btn {
 .host-listing-card__status--live { color: #0d9f6e; font-weight: 600; }
 .host-listing-card__status--action { color: var(--primary); font-weight: 600; }
 .host-listing-card__status--draft { color: var(--text-secondary); }
+
+.host-listing-card__unavail-reason {
+  flex: 1;
+  margin: 0 0.5rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.host-unavail-reason .host-page__subtitle {
+  font-size: 0.82rem;
+}
 
 .host-alert-banner {
   display: flex;

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Building2, MoreHorizontal } from 'lucide-react';
 import { formatCurrency } from '../../api/api';
+import { formatUnavailableReason } from '../../constants/unavailableReasons';
 import { isValidRoomId } from '../../utils/roomId';
 import { Icon, ICON } from '../ui/Icon';
 
@@ -13,6 +14,7 @@ function listingStatus(room) {
 
 export default function HostListingCard({ room, onAction }) {
   const status = listingStatus(room);
+  const unavailableReason = !room.is_available ? formatUnavailableReason(room) : null;
   const photo = room.photos?.find((p) => p.is_primary) || room.photos?.[0];
   const location = [room.location?.area, room.location?.city].filter(Boolean).join(', ');
   const editorPath = isValidRoomId(room._id) ? `/host/rooms/${room._id}/editor` : '/host/rooms/add';
@@ -45,6 +47,11 @@ export default function HostListingCard({ room, onAction }) {
           <span className={`host-listing-card__status host-listing-card__status--${status.variant}`}>
             {status.label}
           </span>
+          {unavailableReason && (
+            <span className="host-listing-card__unavail-reason" title={unavailableReason}>
+              {unavailableReason}
+            </span>
+          )}
           <span>{formatCurrency(room.price_per_night)}/night</span>
         </div>
       </div>

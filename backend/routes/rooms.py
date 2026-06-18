@@ -12,12 +12,18 @@ from database import get_database
 from models.auth import RoomRecommendRequest
 from models.room import RoomCreate, RoomInDB, RoomUpdate
 from models.common import serialize_doc, utc_now
-from services.auth import get_current_user, require_role
+from services.auth import get_current_user, get_optional_user, require_role
 from services.cloudinary import delete_asset, upload_image, upload_video
 from services.geo import filter_by_distance
 from services.recommender import rank_rooms
+from services.roles import normalize_role
+from services.room_serialize import serialize_room
 from services.waitlist import find_conflicting_booking
-from services.availability import blocked_dates_conflict
+from services.availability import (
+    blocked_dates_conflict,
+    find_next_available_any_room,
+    find_next_available_for_room_sets,
+)
 from services.transactions import (
     commit_add_photo,
     commit_add_video,
@@ -41,6 +47,33 @@ def _split_csv(v: Optional[str]) -> Optional[list[str]]:
         return None
     parts = [p.strip() for p in v.split(",") if p.strip()]
     return parts or None
+
+
+def _validate_unavailable_updates(room: dict, updates: dict) -> None:
+    if updates.get("is_available") is False:
+        reason = updates.get("unavailable_reason")
+        if not reason:
+            raise HTTPException(
+                status_code=422,
+                detail={"unavailable_reason": "Choose why this room is unavailable"},
+            )
+        if reason == "other":
+            note = (updates.get("unavailable_reason_note") or "").strip()
+            if len(note) < 3:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "unavailable_reason_note": "Please describe why the room is unavailable"
+                    },
+                )
+
+
+def _viewer_is_room_owner(user: dict | None, room: dict) -> bool:
+    if not user:
+        return False
+    if normalize_role(user.get("role")) == "admin":
+        return True
+    return str(user["_id"]) == room.get("host_id")
 
 
 async def _get_room_or_404(
@@ -213,16 +246,18 @@ async def list_rooms(
                 filtered.append(room)
         items = filtered
 
-    return [serialize_doc(r) for r in items]
+    return [serialize_room(r, for_guest=not host_id) for r in items]
 
 
 @router.get("/{id}")
 async def get_room(
     id: str,
+    user: dict | None = Depends(get_optional_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     room = await _get_room_or_404(id, db)
-    room_doc = serialize_doc(room)
+    for_guest = not _viewer_is_room_owner(user, room)
+    room_doc = serialize_room(room, for_guest=for_guest)
     host_id = room.get("host_id")
     if host_id and ObjectId.is_valid(host_id):
         host = await db["users"].find_one({"_id": ObjectId(host_id)})
@@ -267,6 +302,114 @@ async def get_booked_dates(
     ]
 
 
+async def _room_availability_set(room_id: str, db: AsyncIOMotorDatabase) -> dict | None:
+    if not ObjectId.is_valid(room_id):
+        return None
+    room = await db["rooms"].find_one({"_id": ObjectId(room_id)})
+    if not room:
+        return None
+    items = (
+        await db["bookings"]
+        .find(
+            {
+                "room_id": room_id,
+                "status": {"$in": ["confirmed", "completed"]},
+            }
+        )
+        .to_list(500)
+    )
+    booking_ranges = [
+        (item["check_in_date"], item["check_out_date"])
+        for item in items
+        if item.get("check_in_date") and item.get("check_out_date")
+    ]
+    return {
+        "_id": room_id,
+        "room_number": room.get("room_number"),
+        "blocked_dates": room.get("blocked_dates"),
+        "booking_ranges": booking_ranges,
+    }
+
+
+@router.get("/{id}/next-available")
+async def get_next_available(
+    id: str,
+    check_in: date,
+    check_out: date,
+    room_ids: Optional[str] = None,
+    any_room: bool = False,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    if check_out <= check_in:
+        raise HTTPException(
+            status_code=422, detail={"check_out": "Check-out must be after check-in"}
+        )
+
+    nights = (check_out - check_in).days
+    search_from = max(check_in, date.today())
+    base_room = await _get_room_or_404(id, db)
+
+    if any_room:
+        host_id = base_room.get("host_id")
+        city = base_room.get("location", {}).get("city")
+        if not host_id or not city:
+            return {"check_in": None, "check_out": None, "nights": nights}
+
+        siblings = await db["rooms"].find(
+            {
+                "host_id": host_id,
+                "location.city": city,
+                "is_available": True,
+            }
+        ).sort("room_number", 1).to_list(50)
+
+        room_sets = []
+        for sibling in siblings:
+            data = await _room_availability_set(str(sibling["_id"]), db)
+            if data:
+                room_sets.append(data)
+
+        result = find_next_available_any_room(
+            room_sets,
+            nights=nights,
+            search_from=search_from,
+        )
+        if not result:
+            return {"check_in": None, "check_out": None, "nights": nights}
+
+        next_check_in, next_check_out, room = result
+        return {
+            "check_in": next_check_in.isoformat(),
+            "check_out": next_check_out.isoformat(),
+            "nights": nights,
+            "room_id": room["_id"],
+            "room_number": room.get("room_number"),
+        }
+
+    target_ids = [part.strip() for part in (room_ids or id).split(",") if part.strip()]
+    room_sets = []
+    for target_id in target_ids:
+        data = await _room_availability_set(target_id, db)
+        if not data:
+            raise HTTPException(status_code=404, detail="Room not found")
+        room_sets.append(data)
+
+    window = find_next_available_for_room_sets(
+        room_sets,
+        nights=nights,
+        search_from=search_from,
+    )
+    if not window:
+        return {"check_in": None, "check_out": None, "nights": nights}
+
+    next_check_in, next_check_out = window
+    return {
+        "check_in": next_check_in.isoformat(),
+        "check_out": next_check_out.isoformat(),
+        "nights": nights,
+    }
+
+
 @router.get("/{id}/alternatives")
 async def get_room_alternatives(
     id: str,
@@ -288,14 +431,14 @@ async def get_room_alternatives(
     q: dict = {
         "host_id": host_id,
         "location.city": city,
-        "is_available": True,
     }
     siblings = await db["rooms"].find(q).sort("room_number", 1).to_list(50)
 
     result = []
     for sibling in siblings:
-        available = True
-        if check_in and check_out:
+        published = bool(sibling.get("is_available", True))
+        available = published
+        if published and check_in and check_out:
             if blocked_dates_conflict(
                 sibling.get("blocked_dates"), check_in, check_out
             ):
@@ -306,7 +449,7 @@ async def get_room_alternatives(
                 )
                 if conflict:
                     available = False
-        doc = serialize_doc(sibling)
+        doc = serialize_room(sibling, for_guest=True)
         doc["available_for_dates"] = available
         result.append(doc)
     return result
@@ -402,9 +545,14 @@ async def update_room(
 ):
     room = await _get_room_or_404(id, db, user, require_owner=True)
 
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updates = payload.model_dump(exclude_unset=True)
     if not updates:
         return serialize_doc(room)
+
+    if updates.get("is_available") is True:
+        updates["unavailable_reason"] = None
+        updates["unavailable_reason_note"] = None
+    _validate_unavailable_updates(room, updates)
 
     await db["rooms"].update_one({"_id": ObjectId(id)}, {"$set": updates})
     updated = await db["rooms"].find_one({"_id": ObjectId(id)})

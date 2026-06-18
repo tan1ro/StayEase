@@ -13,6 +13,7 @@ import ErrorMessage from '../../components/ErrorMessage';
 import { Icon, ICON } from '../../components/ui/Icon';
 import { bookingsApi, formatCurrency, roomsApi } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatUnavailableReason } from '../../constants/unavailableReasons';
 import {
   BOOKING_CALENDAR_MONTHS,
   compareISO,
@@ -345,7 +346,9 @@ export default function HostCalendar() {
                 <div>
                   <strong>Availability</strong>
                   <p>
-                    {selectedRoom?.is_available ? 'Published' : 'Unpublished'}
+                    {selectedRoom?.is_available
+                      ? 'Published'
+                      : `Unpublished${formatUnavailableReason(selectedRoom) ? ` · ${formatUnavailableReason(selectedRoom)}` : ''}`}
                     {' · '}
                     Book up to {BOOKING_CALENDAR_MONTHS} months ahead
                   </p>

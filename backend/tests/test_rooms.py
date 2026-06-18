@@ -135,6 +135,69 @@ async def test_update_room_by_non_owner_forbidden(client, guest_token, seed_data
     assert res.status_code == 403
 
 
+async def test_unpublish_room_requires_reason(client, host_token, seed_data):
+    res = await client.patch(
+        f"/api/rooms/{seed_data['room1_id']}",
+        headers={"Authorization": f"Bearer {host_token}"},
+        json={"is_available": False},
+    )
+    assert res.status_code == 422
+
+
+async def test_unpublish_room_with_reason_visible_to_host_only(
+    client, host_token, guest_token, seed_data
+):
+    room_id = seed_data["room1_id"]
+    unpublish = await client.patch(
+        f"/api/rooms/{room_id}",
+        headers={"Authorization": f"Bearer {host_token}"},
+        json={
+            "is_available": False,
+            "unavailable_reason": "maintenance",
+        },
+    )
+    assert unpublish.status_code == 200
+    assert unpublish.json()["unavailable_reason"] == "maintenance"
+
+    guest_view = await client.get(f"/api/rooms/{room_id}")
+    assert guest_view.status_code == 200
+    assert "unavailable_reason" not in guest_view.json()
+
+    host_view = await client.get(
+        f"/api/rooms/{room_id}",
+        headers={"Authorization": f"Bearer {host_token}"},
+    )
+    assert host_view.status_code == 200
+    assert host_view.json()["unavailable_reason"] == "maintenance"
+
+    alternatives = await client.get(f"/api/rooms/{room_id}/alternatives")
+    assert alternatives.status_code == 200
+    target = next(r for r in alternatives.json() if r["_id"] == room_id)
+    assert target["available_for_dates"] is False
+    assert "unavailable_reason" not in target
+
+
+async def test_publish_room_clears_unavailability_reason(client, host_token, seed_data):
+    room_id = seed_data["room1_id"]
+    await client.patch(
+        f"/api/rooms/{room_id}",
+        headers={"Authorization": f"Bearer {host_token}"},
+        json={
+            "is_available": False,
+            "unavailable_reason": "offline_booking",
+        },
+    )
+    republish = await client.patch(
+        f"/api/rooms/{room_id}",
+        headers={"Authorization": f"Bearer {host_token}"},
+        json={"is_available": True},
+    )
+    assert republish.status_code == 200
+    body = republish.json()
+    assert body["is_available"] is True
+    assert body.get("unavailable_reason") is None
+
+
 async def test_delete_room_with_active_booking_fails(client, host_token, seed_data):
     res = await client.delete(
         f"/api/rooms/{seed_data['room1_id']}",

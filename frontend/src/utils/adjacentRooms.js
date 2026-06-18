@@ -1,7 +1,18 @@
 import { parseFloorNumber } from '../constants/roomPlacement';
 
+export function isRoomPublishedToPlatform(room) {
+  return room?.is_available !== false;
+}
+
 export function isRoomAvailableForDates(room) {
+  if (!isRoomPublishedToPlatform(room)) return false;
   return room?.available_for_dates !== false;
+}
+
+export function getRoomPickerStatus(room) {
+  if (!isRoomPublishedToPlatform(room)) return 'unpublished';
+  if (room?.available_for_dates === false) return 'booked';
+  return 'open';
 }
 
 export function sortRoomsOnFloor(rooms) {
@@ -30,32 +41,17 @@ export function getFloorRooms(allRooms, room) {
   return sortRoomsOnFloor(allRooms.filter((item) => parseFloorNumber(item) === floor));
 }
 
-export function canToggleRoom(room, selectedIds, allRooms) {
+export function canToggleRoom(room, selectedIds) {
   if (!isRoomAvailableForDates(room)) return false;
-
-  const isSelected = selectedIds.includes(room._id);
-  if (isSelected) {
-    return selectedIds.length > 1;
-  }
-
-  const selected = allRooms.filter((item) => selectedIds.includes(item._id));
-  const floorRooms = getFloorRooms(allRooms, room);
-  if (selected.length && selected.some((item) => parseFloorNumber(item) !== parseFloorNumber(room))) {
-    return false;
-  }
-
-  const next = [...selected, room];
-  return roomsAreContiguous(next, floorRooms);
+  return true;
 }
 
 export function toggleRoomSelection(room, selectedIds, allRooms) {
   if (!room || !isRoomAvailableForDates(room)) return selectedIds;
   const isSelected = selectedIds.includes(room._id);
   if (isSelected) {
-    const next = selectedIds.filter((id) => id !== room._id);
-    return next.length ? next : [room._id];
+    return selectedIds.filter((id) => id !== room._id);
   }
-  if (!canToggleRoom(room, selectedIds, allRooms)) return selectedIds;
   return [...selectedIds, room._id];
 }
 
@@ -75,23 +71,19 @@ export function resolveAvailableSelection(selectedIds, allRooms, preferredRoomId
     return { ids: [], notice: 'No rooms are open for these dates. Try different dates or join the waitlist.' };
   }
 
+  if (!selectedIds.length) {
+    return { ids: [], notice: '' };
+  }
+
   const stillValid = selectedIds.filter((id) => available.some((room) => room._id === id));
   if (stillValid.length) {
     return { ids: stillValid, notice: '' };
   }
 
   const preferred = allRooms.find((room) => room._id === preferredRoomId);
-  if (preferred && isRoomAvailableForDates(preferred)) {
-    return { ids: [preferred._id], notice: '' };
-  }
+  const notice = preferred && selectedIds.includes(preferred._id)
+    ? `Room ${preferred.room_number} is booked for these dates — pick an open room from the floor map.`
+    : 'One or more selected rooms are booked for these dates — pick open rooms from the floor map.';
 
-  const sameFloor = preferred
-    ? available.filter((room) => parseFloorNumber(room) === parseFloorNumber(preferred))
-    : [];
-  const pick = sameFloor[0] || available[0];
-  const notice = preferred && !isRoomAvailableForDates(preferred)
-    ? `Room ${preferred.room_number} is booked for these dates — pick an open room like ${pick.room_number}.`
-    : 'Pick an open room from the floor map.';
-
-  return { ids: [pick._id], notice };
+  return { ids: [], notice };
 }

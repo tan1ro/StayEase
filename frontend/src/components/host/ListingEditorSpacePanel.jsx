@@ -8,6 +8,8 @@ import { FACING_OPTIONS, normalizeViewType } from '../../constants/roomPlacement
 import { guestPaysPerNightInclGst, listingPricePreview } from '../../utils/listingPricePreview';
 import { getAvatarUrl } from '../../utils/roomImages';
 import SafeImage from '../SafeImage';
+import UnavailabilityReasonForm, { isUnavailabilityReasonValid } from './UnavailabilityReasonForm';
+import { buildUnavailabilityPayload } from '../../constants/unavailableReasons';
 
 const BED_OPTIONS = [
   { value: 'single_bed', label: 'Single bed' },
@@ -56,6 +58,8 @@ export default function ListingEditorSpacePanel({
   const [maxGuests, setMaxGuests] = useState(room.max_guests || 2);
   const [description, setDescription] = useState(room.description || '');
   const [isAvailable, setIsAvailable] = useState(room.is_available ?? false);
+  const [unavailableReason, setUnavailableReason] = useState(room.unavailable_reason || '');
+  const [unavailableReasonNote, setUnavailableReasonNote] = useState(room.unavailable_reason_note || '');
   const [roomCategory, setRoomCategory] = useState(room.room_category || 'Double');
   const [bedConfig, setBedConfig] = useState(room.bed_configuration || 'double_bed');
   const [foodPreference, setFoodPreference] = useState(room.food_preference || 'veg');
@@ -80,6 +84,8 @@ export default function ListingEditorSpacePanel({
     setMaxGuests(room.max_guests || 2);
     setDescription(room.description || '');
     setIsAvailable(room.is_available ?? false);
+    setUnavailableReason(room.unavailable_reason || '');
+    setUnavailableReasonNote(room.unavailable_reason_note || '');
     setRoomCategory(room.room_category || 'Double');
     setBedConfig(room.bed_configuration || 'double_bed');
     setFoodPreference(room.food_preference || 'veg');
@@ -277,6 +283,8 @@ export default function ListingEditorSpacePanel({
   }
 
   if (section === 'availability') {
+    const canSave = isAvailable || isUnavailabilityReasonValid(unavailableReason, unavailableReasonNote);
+
     return (
       <>
         <h1>Availability</h1>
@@ -292,13 +300,44 @@ export default function ListingEditorSpacePanel({
               type="checkbox"
               checked={isAvailable}
               onChange={(e) => {
-                setIsAvailable(e.target.checked);
-                patchDraft({ is_available: e.target.checked });
+                const next = e.target.checked;
+                setIsAvailable(next);
+                if (next) {
+                  setUnavailableReason('');
+                  setUnavailableReasonNote('');
+                  patchDraft({ is_available: true, unavailable_reason: null, unavailable_reason_note: null });
+                } else {
+                  patchDraft({ is_available: false });
+                }
               }}
             />
           </label>
+          {!isAvailable && (
+            <div style={{ marginTop: '1.25rem' }}>
+              <UnavailabilityReasonForm
+                reason={unavailableReason}
+                note={unavailableReasonNote}
+                onReasonChange={(value) => {
+                  setUnavailableReason(value);
+                  patchDraft({
+                    unavailable_reason: value || null,
+                    unavailable_reason_note: value === 'other' ? unavailableReasonNote : null,
+                  });
+                }}
+                onNoteChange={(value) => {
+                  setUnavailableReasonNote(value);
+                  patchDraft({ unavailable_reason_note: value.trim() || null });
+                }}
+                idPrefix="editor-unavail"
+              />
+            </div>
+          )}
         </div>
-        <EditorSaveBar saving={saving} onSave={() => onSave({ is_available: isAvailable })} />
+        <EditorSaveBar
+          saving={saving}
+          disabled={!canSave}
+          onSave={() => onSave(buildUnavailabilityPayload(isAvailable, unavailableReason, unavailableReasonNote))}
+        />
       </>
     );
   }

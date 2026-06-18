@@ -6,6 +6,8 @@ import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmModal from '../../components/ConfirmModal';
 import Modal from '../../components/Modal';
 import HostListingCard, { isListingIncomplete } from '../../components/host/HostListingCard';
+import UnavailabilityReasonForm, { isUnavailabilityReasonValid } from '../../components/host/UnavailabilityReasonForm';
+import { buildUnavailabilityPayload } from '../../constants/unavailableReasons';
 import { Icon, ICON } from '../../components/ui/Icon';
 import { HostHero, HostKpi, HostKpiGrid, HostPage, HostPanel } from '../../components/host/HostPageLayout';
 import { formatCurrency, roomsApi } from '../../api/api';
@@ -20,6 +22,10 @@ export default function ManageRooms() {
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [actionRoom, setActionRoom] = useState(null);
+  const [unpublishRoom, setUnpublishRoom] = useState(null);
+  const [unpublishReason, setUnpublishReason] = useState('');
+  const [unpublishNote, setUnpublishNote] = useState('');
+  const [unpublishing, setUnpublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
@@ -51,17 +57,48 @@ export default function ManageRooms() {
     return { live, drafts, avgRating, avgPrice };
   }, [rooms]);
 
-  const toggleAvailability = async (room) => {
+  const toggleAvailability = async (room, extra = {}) => {
     const roomId = room._id || room.id;
-    const next = !room.is_available;
+    const next = extra.is_available ?? !room.is_available;
     setError('');
     try {
-      await roomsApi.update(roomId, { is_available: next });
+      const payload = next
+        ? { is_available: true }
+        : buildUnavailabilityPayload(false, extra.unavailable_reason, extra.unavailable_reason_note);
+      await roomsApi.update(roomId, payload);
       setRooms((prev) => prev.map((r) => (
-        (r._id || r.id) === roomId ? { ...r, is_available: next } : r
+        (r._id || r.id) === roomId ? { ...r, ...payload } : r
       )));
     } catch (err) {
       setError(err.normalized?.message || 'Could not update availability');
+      throw err;
+    }
+  };
+
+  const openUnpublishModal = (room) => {
+    setUnpublishReason(room.unavailable_reason || '');
+    setUnpublishNote(room.unavailable_reason_note || '');
+    setUnpublishRoom(room);
+    setActionRoom(null);
+  };
+
+  const confirmUnpublish = async () => {
+    if (!unpublishRoom || !isUnavailabilityReasonValid(unpublishReason, unpublishNote)) return;
+    setUnpublishing(true);
+    setError('');
+    try {
+      await toggleAvailability(unpublishRoom, {
+        is_available: false,
+        unavailable_reason: unpublishReason,
+        unavailable_reason_note: unpublishNote,
+      });
+      setUnpublishRoom(null);
+      setUnpublishReason('');
+      setUnpublishNote('');
+    } catch {
+      // error already set
+    } finally {
+      setUnpublishing(false);
     }
   };
 
@@ -146,8 +183,12 @@ export default function ManageRooms() {
               type="button"
               className="btn btn-outline btn-sm"
               onClick={() => {
-                toggleAvailability(actionRoom);
-                setActionRoom(null);
+                if (actionRoom.is_available) {
+                  openUnpublishModal(actionRoom);
+                } else {
+                  toggleAvailability(actionRoom);
+                  setActionRoom(null);
+                }
               }}
             >
               {actionRoom.is_available ? 'Unpublish' : 'Publish listing'}
@@ -165,6 +206,41 @@ export default function ManageRooms() {
           </div>
         </Modal>
       )}
+
+      <Modal
+        open={!!unpublishRoom}
+        onClose={() => !unpublishing && setUnpublishRoom(null)}
+        title={`Unpublish ${unpublishRoom?.title || 'listing'}?`}
+      >
+        <p className="host-page__subtitle">
+          Guests will no longer be able to book this room online. Tell us why so you can track it on your dashboard.
+        </p>
+        <UnavailabilityReasonForm
+          reason={unpublishReason}
+          note={unpublishNote}
+          onReasonChange={setUnpublishReason}
+          onNoteChange={setUnpublishNote}
+          idPrefix="manage-unavail"
+        />
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={unpublishing || !isUnavailabilityReasonValid(unpublishReason, unpublishNote)}
+            onClick={confirmUnpublish}
+          >
+            {unpublishing ? 'Saving…' : 'Unpublish listing'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={unpublishing}
+            onClick={() => setUnpublishRoom(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
 
       <ConfirmModal
         open={!!deleteTarget}

@@ -94,6 +94,29 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict[str, Any] | None:
+    if creds is None or not creds.credentials:
+        return None
+    try:
+        payload = jwt.decode(
+            creds.credentials, settings.JWT_SECRET, algorithms=["HS256"]
+        )
+        sub = payload.get("sub")
+        if not sub:
+            return None
+    except JWTError:
+        return None
+
+    users = database.collection("users")
+    user = await users.find_one({"_id": PyObjectId(sub)})
+    if not user:
+        return None
+    user["role"] = normalize_role(user.get("role"))
+    return user
+
+
 def require_role(*allowed: Role):
     allowed_normalized = {normalize_role(r) for r in allowed}
 

@@ -5,6 +5,7 @@ import PriceBreakdown from '../../components/PriceBreakdown';
 import DatePicker from '../../components/DatePicker';
 import RoomBadges from '../../components/RoomBadges';
 import RoomFloorPicker from '../../components/RoomFloorPicker';
+import NextAvailableDates from '../../components/NextAvailableDates';
 import BookingGuestVerification, {
   defaultGuestVerification,
   prepareBookingVerification,
@@ -107,7 +108,7 @@ export default function BookRoom() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmedBookings, setConfirmedBookings] = useState(null);
   const [confirmedPricing, setConfirmedPricing] = useState(null);
-  const [selectedRoomIds, setSelectedRoomIds] = useState(() => [roomId]);
+  const [selectedRoomIds, setSelectedRoomIds] = useState([]);
   const [propertyRooms, setPropertyRooms] = useState([]);
   const [conflictError, setConflictError] = useState('');
   const [showWaitlistForm, setShowWaitlistForm] = useState(false);
@@ -119,6 +120,9 @@ export default function BookRoom() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [pendingVerificationPayload, setPendingVerificationPayload] = useState(null);
   const [pendingPaymentBookingIds, setPendingPaymentBookingIds] = useState(null);
+  const [nextAvailable, setNextAvailable] = useState(null);
+  const [nextAvailableLoading, setNextAvailableLoading] = useState(false);
+  const [nextAvailableReady, setNextAvailableReady] = useState(false);
 
   const dateValidationError = useMemo(() => {
     if (!checkIn || !checkOut) return '';
@@ -132,7 +136,7 @@ export default function BookRoom() {
 
   const activeOfferCode = offerApplied?.code;
 
-  const activeRoomIds = selectedRoomIds.length ? selectedRoomIds : [roomId];
+  const activeRoomIds = selectedRoomIds;
 
   const unavailableSelectedRooms = useMemo(
     () => propertyRooms.filter(
@@ -150,6 +154,91 @@ export default function BookRoom() {
     [propertyRooms, activeRoomIds],
   );
 
+  const openRoomCount = useMemo(
+    () => propertyRooms.filter(isRoomAvailableForDates).length,
+    [propertyRooms],
+  );
+
+  const preferredRoomUnavailable = useMemo(() => {
+    const preferred = propertyRooms.find((item) => item._id === roomId);
+    return Boolean(preferred && !isRoomAvailableForDates(preferred));
+  }, [propertyRooms, roomId]);
+
+  const shouldFetchNextAvailable = useMemo(() => {
+    if (!datesReady || !roomId || !propertyRooms.length) return false;
+    if (openRoomCount === 0) return true;
+    if (preferredRoomUnavailable) return true;
+    return hasUnavailableSelection;
+  }, [
+    datesReady,
+    roomId,
+    propertyRooms.length,
+    openRoomCount,
+    preferredRoomUnavailable,
+    hasUnavailableSelection,
+  ]);
+
+  useEffect(() => {
+    if (!shouldFetchNextAvailable) {
+      setNextAvailable(null);
+      setNextAvailableLoading(false);
+      setNextAvailableReady(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setNextAvailableLoading(true);
+    setNextAvailableReady(false);
+
+    const requestRoomIds = openRoomCount === 0
+      ? undefined
+      : preferredRoomUnavailable && !hasUnavailableSelection
+        ? roomId
+        : activeRoomIds.join(',');
+
+    roomsApi.nextAvailable(roomId, {
+      check_in: checkIn,
+      check_out: checkOut,
+      ...(openRoomCount === 0
+        ? { any_room: true }
+        : { room_ids: requestRoomIds }),
+    })
+      .then(({ data }) => {
+        if (!cancelled) {
+          setNextAvailable(data);
+          setNextAvailableReady(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNextAvailable(null);
+          setNextAvailableReady(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setNextAvailableLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    shouldFetchNextAvailable,
+    roomId,
+    checkIn,
+    checkOut,
+    activeRoomIds,
+    openRoomCount,
+    hasUnavailableSelection,
+    preferredRoomUnavailable,
+  ]);
+
+  const nextAvailableContext = openRoomCount === 0
+    ? 'property'
+    : activeRoomIds.length > 1 || hasUnavailableSelection
+      ? 'rooms'
+      : 'room';
+
   const { pricing, loading: pricingLoading, error: pricingError, nights } = useMultiRoomPricing(
     activeRoomIds,
     dateValidationError ? '' : checkIn,
@@ -159,7 +248,7 @@ export default function BookRoom() {
   );
 
   useEffect(() => {
-    setSelectedRoomIds([roomId]);
+    setSelectedRoomIds([]);
   }, [roomId]);
 
   useEffect(() => {
@@ -182,11 +271,12 @@ export default function BookRoom() {
   const location = [room?.location?.area, room?.location?.city].filter(Boolean).join(', ');
 
   const selectedRoomLabel = useMemo(() => {
+    if (!selectedRooms.length) return '';
     if (selectedRooms.length > 1) {
       return selectedRooms.map((item) => item.room_number).filter(Boolean).join(', ');
     }
-    return room?.room_number || '—';
-  }, [selectedRooms, room?.room_number]);
+    return selectedRooms[0]?.room_number || '—';
+  }, [selectedRooms]);
 
   const roomCount = activeRoomIds.length;
   const maxGuestsPerRoom = useMemo(() => {
@@ -206,7 +296,9 @@ export default function BookRoom() {
     return room?.max_guests || 10;
   }, [selectedRooms, room?.max_guests]);
 
-  const totalGuests = Math.min(guestsPerRoom * roomCount, maxTotalGuests);
+  const totalGuests = roomCount > 0
+    ? Math.min(guestsPerRoom * roomCount, maxTotalGuests)
+    : guestsPerRoom;
   const guestsSummaryLabel = roomCount > 1
     ? `${totalGuests} guest${totalGuests !== 1 ? 's' : ''} (${guestsPerRoom} per room)`
     : `${totalGuests} guest${totalGuests !== 1 ? 's' : ''}`;
@@ -214,6 +306,22 @@ export default function BookRoom() {
   useEffect(() => {
     setGuestsPerRoom((current) => Math.min(current, maxGuestsPerRoom));
   }, [maxGuestsPerRoom]);
+
+  const handleApplyNextAvailableDates = (nextCheckIn, nextCheckOut, suggestion) => {
+    setCheckIn(nextCheckIn);
+    setCheckOut(nextCheckOut);
+    const params = new URLSearchParams(searchParams);
+    params.set('check_in', nextCheckIn);
+    params.set('check_out', nextCheckOut);
+    if (guestsPerRoom !== 1) params.set('guests', String(guestsPerRoom));
+    else params.delete('guests');
+
+    const targetRoomId = suggestion?.room_id || activeRoomIds[0] || roomId;
+    if (suggestion?.room_id) {
+      setSelectedRoomIds([suggestion.room_id]);
+    }
+    navigate(`/book/${targetRoomId}?${params.toString()}`, { replace: true });
+  };
 
   const handleApplyOffer = async () => {
     const code = offerCode.trim().toUpperCase();
@@ -248,6 +356,11 @@ export default function BookRoom() {
     }
     if (!acceptedTerms) {
       setError('Please accept the Terms of Service, Privacy Policy, and Cookie Policy to continue');
+      return;
+    }
+    if (!activeRoomIds.length) {
+      setError('Pick a room from the floor map to continue');
+      scrollToSection('booking-step-room');
       return;
     }
     if (hasUnavailableSelection) {
@@ -526,8 +639,16 @@ export default function BookRoom() {
             <section className="book-room__section card" id="booking-step-room">
               <h2>2. Pick your room{activeRoomIds.length > 1 ? 's' : ''}</h2>
               <p className="book-room__section-lead">
-                Select one or more adjoining rooms on the floor map — great for families and groups staying together.
+                Pick one or more open rooms on the floor map — compare floor, view, and sunrise or sunset light.
               </p>
+              {shouldFetchNextAvailable && (nextAvailableLoading || nextAvailableReady) && (
+                <NextAvailableDates
+                  suggestion={nextAvailable}
+                  loading={nextAvailableLoading}
+                  onApply={handleApplyNextAvailableDates}
+                  context={nextAvailableContext}
+                />
+              )}
               <RoomFloorPicker
                 roomId={activeRoomIds[0] || roomId}
                 currentRoom={room}
@@ -687,12 +808,19 @@ export default function BookRoom() {
                 Change
               </button>
             </div>
-            {selectedRoomLabel && (
-              <div className="book-room__summary-row">
-                <span>Room{activeRoomIds.length > 1 ? 's' : ''}</span>
-                <strong>{selectedRoomLabel}</strong>
+            <div className="book-room__summary-row book-room__summary-row--editable">
+              <div className="book-room__summary-row-text">
+                <span className="book-room__summary-label">Room{activeRoomIds.length > 1 ? 's' : ''}</span>
+                <strong>{selectedRoomLabel || 'Select a room'}</strong>
               </div>
-            )}
+              <button
+                type="button"
+                className="book-room__summary-change"
+                onClick={() => scrollToSection('booking-step-room')}
+              >
+                {selectedRoomLabel ? 'Change' : 'Choose'}
+              </button>
+            </div>
           </div>
 
           <h4 className="book-room__summary-price-title">Price details</h4>
@@ -700,7 +828,11 @@ export default function BookRoom() {
           {pricing && <PriceBreakdown pricing={pricing} compact />}
           {!pricing && !pricingLoading && (
             <p className="book-room__pricing-loading">
-              {datesReady ? 'Select valid dates for pricing' : 'Choose dates to see your total'}
+              {!datesReady
+                ? 'Choose dates to see your total'
+                : !activeRoomIds.length
+                  ? 'Pick a room from the floor map to see pricing'
+                  : 'Select valid dates for pricing'}
             </p>
           )}
           {nights > 0 && pricing && (

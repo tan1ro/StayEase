@@ -44,7 +44,11 @@ vi.mock('../../api/api', async () => {
   const actual = await vi.importActual('../../api/api');
   return {
     ...actual,
-    roomsApi: { get: vi.fn(), alternatives: vi.fn().mockResolvedValue({ data: [] }) },
+    roomsApi: {
+      get: vi.fn(),
+      alternatives: vi.fn().mockResolvedValue({ data: [] }),
+      nextAvailable: vi.fn().mockResolvedValue({ data: { check_in: null, check_out: null } }),
+    },
     pricingApi: { calculate: vi.fn() },
     bookingsApi: { create: vi.fn(), createBatch: vi.fn(), pay: vi.fn(), uploadVerification: vi.fn() },
   };
@@ -82,11 +86,54 @@ function acceptTerms() {
   fireEvent.click(screen.getByRole('checkbox', { name: /terms of service/i }));
 }
 
+const mockPropertyRoom = {
+  ...mockRoom,
+  floor_number: 0,
+  available_for_dates: true,
+};
+
+const mockPropertyRoomTwo = {
+  ...mockRoom,
+  _id: 'room2',
+  room_number: '102',
+  floor_number: 0,
+  available_for_dates: true,
+};
+
+function renderBookRoom() {
+  roomsApi.alternatives.mockResolvedValue({ data: [mockPropertyRoom, mockPropertyRoomTwo] });
+  return render(
+    <MemoryRouter initialEntries={['/book/room1']}>
+      <Routes><Route path="/book/:roomId" element={<BookRoom />} /></Routes>
+    </MemoryRouter>,
+  );
+}
+
+async function pickDatesAndRoom() {
+  const ci = new Date();
+  ci.setDate(ci.getDate() + 5);
+  const co = new Date();
+  co.setDate(co.getDate() + 8);
+  await waitFor(() => expect(screen.getByLabelText('Check-in')).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText('Check-in'), { target: { value: localDateStr(ci) } });
+  fireEvent.change(screen.getByLabelText('Check-out'), { target: { value: localDateStr(co) } });
+  await waitFor(() => expect(screen.getByRole('heading', { name: /2\. Pick your room/i })).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTitle(/Add room 101/i)).toBeInTheDocument());
+  fireEvent.click(screen.getByTitle(/Add room 101/i));
+}
+
 describe('BookRoom', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     roomsApi.get.mockResolvedValue({ data: mockRoom });
+    roomsApi.alternatives.mockResolvedValue({ data: [mockPropertyRoom, mockPropertyRoomTwo] });
     pricingApi.calculate.mockResolvedValue({ data: mockPricing });
+  });
+
+  it('does not pre-select a room in the summary', async () => {
+    renderBookRoom();
+    await waitFor(() => expect(screen.getByText('Test Room')).toBeInTheDocument());
+    expect(screen.getByText('Select a room')).toBeInTheDocument();
   });
 
   it('shows room details at top', async () => {
@@ -154,19 +201,9 @@ describe('BookRoom', () => {
     expect(screen.getByPlaceholderText('e.g. WELCOME10')).toHaveValue('WELCOME10');
   });
 
-  it('shows live price breakdown on date change', async () => {
-    const ci = new Date();
-    ci.setDate(ci.getDate() + 5);
-    const co = new Date();
-    co.setDate(co.getDate() + 8);
-    render(
-      <MemoryRouter initialEntries={['/book/room1']}>
-        <Routes><Route path="/book/:roomId" element={<BookRoom />} /></Routes>
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByLabelText('Check-in')).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Check-in'), { target: { value: localDateStr(ci) } });
-    fireEvent.change(screen.getByLabelText('Check-out'), { target: { value: localDateStr(co) } });
+  it('shows live price breakdown after dates and room selection', async () => {
+    renderBookRoom();
+    await pickDatesAndRoom();
     await waitFor(() => {
       expect(pricingApi.calculate).toHaveBeenCalled();
     });
@@ -178,18 +215,8 @@ describe('BookRoom', () => {
         normalized: { status: 409, message: 'Room unavailable for selected dates' },
       }),
     );
-    const ci = new Date();
-    ci.setDate(ci.getDate() + 5);
-    const co = new Date();
-    co.setDate(co.getDate() + 8);
-    render(
-      <MemoryRouter initialEntries={['/book/room1']}>
-        <Routes><Route path="/book/:roomId" element={<BookRoom />} /></Routes>
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByLabelText('Check-in')).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Check-in'), { target: { value: localDateStr(ci) } });
-    fireEvent.change(screen.getByLabelText('Check-out'), { target: { value: localDateStr(co) } });
+    renderBookRoom();
+    await pickDatesAndRoom();
     await waitFor(() => expect(pricingApi.calculate).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId('price-breakdown')).toBeInTheDocument());
     acceptTerms();

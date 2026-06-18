@@ -33,6 +33,13 @@ FacingSide = Literal[
     "south_west",
     "none",
 ]
+UnavailableReason = Literal[
+    "maintenance",
+    "offline_booking",
+    "owner_use",
+    "renovation",
+    "other",
+]
 
 
 class Photo(BaseModel):
@@ -86,6 +93,8 @@ class RoomCreate(BaseModel):
     price_per_night: float = Field(gt=0)
     amenities: list[str] = Field(default_factory=list)
     is_available: bool = True
+    unavailable_reason: Optional[UnavailableReason] = None
+    unavailable_reason_note: Optional[str] = Field(default=None, max_length=200)
     max_guests: int = Field(ge=1, le=10)
     location: Location
 
@@ -119,6 +128,8 @@ class RoomUpdate(BaseModel):
     price_per_night: Optional[float] = Field(default=None, gt=0)
     amenities: Optional[list[str]] = None
     is_available: Optional[bool] = None
+    unavailable_reason: Optional[UnavailableReason] = None
+    unavailable_reason_note: Optional[str] = Field(default=None, max_length=200)
     max_guests: Optional[int] = Field(default=None, ge=1, le=10)
     location: Optional[Location] = None
     food_preference: Optional[FoodPreference] = None
@@ -145,6 +156,8 @@ class RoomInDB(MongoModel):
     price_per_night: float
     amenities: list[str] = Field(default_factory=list)
     is_available: bool = True
+    unavailable_reason: Optional[UnavailableReason] = None
+    unavailable_reason_note: Optional[str] = None
     max_guests: int
     location: Location
     photos: list[Photo] = Field(default_factory=list)
