@@ -54,12 +54,12 @@ export default function Navbar({ showSearch = false, onSearch }) {
               )
             )}
             {isHostRoute && isHostAccount && (
-              <Link to="/" className="navbar__host-link">
+              <Link to="/" className="navbar__host-link hide-mobile">
                 Switch to guest
               </Link>
             )}
             {!isHostRoute && isHostAccount && (
-              <Link to="/host" className="navbar__host-link">
+              <Link to="/host" className="navbar__host-link hide-mobile">
                 Switch to host
               </Link>
             )}

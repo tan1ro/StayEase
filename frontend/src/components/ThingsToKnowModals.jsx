@@ -36,7 +36,7 @@ export function CancellationPolicyModal({ open, onClose, policy = 'moderate', ch
             If you&apos;re making scheduled payments, your refund or amount due will depend on how much
             you&apos;ve paid at the time of cancellation.
           </p>
-          <Link to="/terms#cancellation" className="listing-policy-modal__link">
+          <Link to="/help/cancellation" className="listing-policy-modal__link">
             How to find any cancellation policy
           </Link>
         </>

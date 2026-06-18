@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from bson import ObjectId
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from config import settings
 from database import get_database
 from models.booking import (
     BookingBatchCreate,
@@ -20,7 +22,7 @@ from services.auth import get_current_user, require_role
 from services.roles import is_host_role, is_tourist_role, normalize_role
 from services.email import send_template_email
 from services.invoice import generate_invoice_pdf, generate_tax_invoice_pdf
-from services.cloudinary import upload_image, upload_pdf
+from services.cloudinary import upload_image, upload_pdf_optional
 from services.pricing import calculate_dynamic_pricing
 from services.cancellation import calculate_cancellation
 from services.booking_commit import (
@@ -35,6 +37,7 @@ from services.whatsapp import booking_confirmation_message, send_whatsapp
 from services.review_eligibility import is_booking_reviewable
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
+logger = logging.getLogger(__name__)
 
 
 def _build_check_in_verification(
@@ -342,10 +345,24 @@ async def create_bookings_batch(
         )
         send_whatsapp(user["phone"], booking_confirmation_message(booking_ser, room))
 
+    paid_bookings: list[dict] = []
+    for booking_ser in serialized:
+        try:
+            paid = await finalize_booking_payment(booking_ser["_id"], user, db)
+            paid_bookings.append(paid)
+        except Exception as exc:
+            logger.warning(
+                "Auto-pay failed for booking %s: %s",
+                booking_ser.get("_id"),
+                exc,
+            )
+            paid_bookings.append(booking_ser)
+
     return {
         "booking_group_id": serialized[0].get("booking_group_id"),
-        "bookings": serialized,
-        "total_price": sum(item.get("total_price", 0) for item in serialized),
+        "bookings": paid_bookings,
+        "total_price": sum(item.get("total_price", 0) for item in paid_bookings),
+        "all_paid": all(item.get("payment_status") == "paid" for item in paid_bookings),
     }
 
 
@@ -541,15 +558,14 @@ async def cancel_booking(
     }
 
 
-@router.post("/{id}/pay")
-async def pay_booking(
-    id: str,
-    user: dict = Depends(get_current_user),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
-    if not ObjectId.is_valid(id):
+async def finalize_booking_payment(
+    booking_id: str,
+    user: dict,
+    db: AsyncIOMotorDatabase,
+) -> dict:
+    if not ObjectId.is_valid(booking_id):
         raise HTTPException(status_code=404, detail="Booking not found")
-    booking = await db["bookings"].find_one({"_id": ObjectId(id)})
+    booking = await db["bookings"].find_one({"_id": ObjectId(booking_id)})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking["guest_id"] != str(user["_id"]) and user["role"] != "admin":
@@ -558,7 +574,12 @@ async def pay_booking(
         return serialize_doc(booking)
 
     room = await db["rooms"].find_one({"_id": ObjectId(booking["room_id"])})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
     host = await db["users"].find_one({"_id": ObjectId(room["host_id"])})
+    if not host:
+        host = {"name": "Host", "email": settings.MAIL_FROM}
     guest = user
 
     invoice_number = (
@@ -583,10 +604,10 @@ async def pay_booking(
         host=host,
         pricing=pricing,
     )
-    uploaded = await upload_pdf(pdf_bytes, public_id=invoice_number)
+    invoice_url = await upload_pdf_optional(pdf_bytes, public_id=invoice_number) or ""
 
     invoice_doc = {
-        "booking_id": id,
+        "booking_id": booking_id,
         "invoice_number": invoice_number,
         "guest_details": {"name": guest["name"], "email": guest["email"]},
         "host_details": {"name": host["name"], "email": host["email"]},
@@ -598,14 +619,14 @@ async def pay_booking(
         "host_payout": booking.get("host_payout", booking["subtotal"]),
         "gst_breakdown": pricing["gst_breakdown"],
         "total": booking["total_price"],
-        "pdf_url": uploaded["url"],
+        "pdf_url": invoice_url,
         "created_at": utc_now(),
     }
 
     updated, is_new_payment = await commit_payment(
-        booking_id=id,
+        booking_id=booking_id,
         invoice_doc=invoice_doc,
-        invoice_url=uploaded["url"],
+        invoice_url=invoice_url,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -619,6 +640,15 @@ async def pay_booking(
         )
 
     return serialize_doc(updated)
+
+
+@router.post("/{id}/pay")
+async def pay_booking(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    return await finalize_booking_payment(id, user, db)
 
 
 @router.get("/{id}/receipt")

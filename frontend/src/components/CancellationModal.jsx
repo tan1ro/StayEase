@@ -77,7 +77,7 @@ export default function CancellationModal({ open, onClose, bookingId, onCancelle
               onChange={(e) => setAccepted(e.target.checked)}
             />
             I understand the cancellation charges and agree to the{' '}
-            <Link to="/terms#cancellation" target="_blank" rel="noreferrer">Terms & Cancellation Policy</Link>.
+            <Link to="/help/cancellation" target="_blank" rel="noreferrer">Terms & Cancellation Policy</Link>.
           </label>
           <div className="cancel-modal__actions">
             <button type="button" className="btn btn-outline" onClick={onClose}>

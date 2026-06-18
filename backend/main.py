@@ -37,7 +37,11 @@ async def lifespan(_: FastAPI):
 
 
 def _cors_origins() -> list[str]:
-    return [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
+    return [
+        origin.strip()
+        for origin in settings.ALLOWED_ORIGINS.split(",")
+        if origin.strip()
+    ]
 
 
 def create_app() -> FastAPI:

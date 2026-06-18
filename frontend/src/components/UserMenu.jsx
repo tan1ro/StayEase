@@ -66,15 +66,16 @@ export default function UserMenu() {
     { to: '/messages', icon: MessageCircle, label: 'Messages' },
     { to: '/settings', icon: User, label: 'Profile' },
     { divider: true },
+    ...(canAccessHostPortal
+      ? [{ to: '/host', icon: Building2, label: 'Switch to hosting' }]
+      : isAuthenticated
+        ? [{ action: handleBecomeHost, icon: Building2, label: upgrading ? 'Upgrading…' : 'Become a host', disabled: upgrading }]
+        : [{ to: '/register?as=host', icon: Building2, label: 'Become a host' }]),
+    { divider: true },
     { to: '/notifications', icon: Bell, label: 'Notifications' },
     { to: '/settings#locale', icon: Globe, label: 'Languages & currency' },
     { to: '/settings', icon: Settings, label: 'Account settings' },
     { to: '/help', icon: HelpCircle, label: 'Help Centre' },
-    ...(!canAccessHostPortal
-      ? isAuthenticated
-        ? [{ divider: true }, { action: handleBecomeHost, icon: Building2, label: upgrading ? 'Upgrading…' : 'Become a host', disabled: upgrading }]
-        : [{ divider: true }, { to: '/register?as=host', icon: Building2, label: 'Become a host' }]
-      : []),
     { divider: true },
     { action: () => { setOpen(false); setLogoutOpen(true); }, icon: LogOut, label: 'Log out' },
   ];

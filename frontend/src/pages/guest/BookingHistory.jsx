@@ -6,11 +6,13 @@ import ConfirmModal from '../../components/ConfirmModal';
 import ErrorMessage from '../../components/ErrorMessage';
 import Spinner from '../../components/Spinner';
 import TripBookingCard from '../../components/TripBookingCard';
+import TripsTable from '../../components/TripsTable';
 import TripsViewToggle from '../../components/TripsViewToggle';
 import WriteReviewModal from '../../components/WriteReviewModal';
 import { HostTabs } from '../../components/host/HostPageLayout';
 import { Icon, ICON } from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
+import { sortTrips, tripSearchHaystack } from '../../utils/tripBooking';
 
 const FILTERS = ['', 'confirmed', 'completed', 'cancelled'];
 const TAB_LABELS = ['All', 'Confirmed', 'Completed', 'Cancelled'];
@@ -42,6 +44,7 @@ export default function BookingHistory() {
   const [cancelling, setCancelling] = useState(false);
   const [reviewBooking, setReviewBooking] = useState(null);
   const [viewMode, setViewMode] = useState(loadViewMode);
+  const [sortBy, setSortBy] = useState('booked_desc');
 
   const handleViewChange = (mode) => {
     setViewMode(mode);
@@ -96,21 +99,11 @@ export default function BookingHistory() {
 
   const filteredBookings = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return bookings;
-    return bookings.filter((b) => {
-      const room = roomMap[b.room_id];
-      const haystack = [
-        b.guest_name,
-        b.room_title,
-        room?.room_number,
-        room?.title,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [bookings, roomMap, search]);
+    const list = q
+      ? bookings.filter((b) => tripSearchHaystack(b, roomMap[b.room_id]).includes(q))
+      : bookings;
+    return sortTrips(list, sortBy);
+  }, [bookings, roomMap, search, sortBy]);
 
   const confirmCancel = async () => {
     if (!cancelId) return;
@@ -188,14 +181,22 @@ export default function BookingHistory() {
           <p>No bookings yet.</p>
           <Link to="/" className="btn btn-primary">Find a room →</Link>
         </div>
+      ) : viewMode === 'list' ? (
+        <TripsTable
+          bookings={filteredBookings}
+          roomMap={roomMap}
+          sortBy={sortBy}
+          onSort={setSortBy}
+          onReview={setReviewBooking}
+          onCancel={setCancelId}
+        />
       ) : (
-        <div className={`trips-layout trips-layout--${viewMode}`}>
+        <div className="trips-layout trips-layout--grid">
           {filteredBookings.map((b) => (
             <TripBookingCard
               key={b._id || b.id}
               booking={b}
               room={roomMap[b.room_id]}
-              view={viewMode}
               onReview={setReviewBooking}
               onCancel={setCancelId}
             />

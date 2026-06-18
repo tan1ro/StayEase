@@ -5,9 +5,39 @@ import { Icon, ICON } from '../../components/ui/Icon';
 const TOPICS = [
   {
     icon: Shield,
-    title: 'Booking & cancellations',
-    body: 'Learn how reservations, refunds, and cancellation policies work on StayEase.',
-    to: '/terms',
+    title: 'Cancellation options',
+    body: 'Flexible, Moderate, and Strict policies — and how refunds are calculated.',
+    to: '/help/cancellation',
+  },
+  {
+    icon: Wallet,
+    title: 'Billing & GST',
+    body: 'Understand checkout breakdowns, service fees, and Indian hotel GST slabs.',
+    to: '/help/billing-gst',
+  },
+  {
+    icon: FileText,
+    title: 'Invoices & receipts',
+    body: 'Download tax invoices and hotel vouchers from your trip history.',
+    to: '/help/invoices',
+  },
+  {
+    icon: CircleHelp,
+    title: 'Tourist guidelines',
+    body: 'Travel responsibly, verify at check-in, and respect house rules.',
+    to: '/help/tourist-guidelines',
+  },
+  {
+    icon: Shield,
+    title: 'Host guidelines',
+    body: 'Listing standards, guest communication, and compliance for hosts.',
+    to: '/help/host-guidelines',
+  },
+  {
+    icon: Scale,
+    title: 'Hosting responsibly',
+    body: 'Safety, inclusion, neighbours, and legal compliance for hosts.',
+    to: '/help/hosting-responsibly',
   },
   {
     icon: Scale,
@@ -26,12 +56,6 @@ const TOPICS = [
     title: 'Nondiscrimination',
     body: 'Our commitment to inclusive hosting and travel for everyone.',
     to: '/help/nondiscrimination',
-  },
-  {
-    icon: Wallet,
-    title: 'Payments & invoices',
-    body: 'Download receipts, understand GST invoices, and payment timelines.',
-    to: '/bookings',
   },
   {
     icon: CircleHelp,

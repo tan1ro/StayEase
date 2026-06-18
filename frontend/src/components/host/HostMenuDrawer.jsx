@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   Building2,
+  ChevronRight,
   CircleHelp,
   Globe,
   Home,
@@ -20,7 +21,6 @@ import LogoutConfirmModal from '../LogoutConfirmModal';
 import HostReferHostModal from './HostReferHostModal';
 
 const MENU_ITEMS = [
-  { to: '/', icon: Home, label: 'Switch to guest' },
   { to: '/host/payouts', icon: IndianRupee, label: 'Payouts' },
   { to: '/host/settings', icon: Settings, label: 'Account settings' },
   { to: '/host/settings#locale', icon: Globe, label: 'Languages & currency' },
@@ -79,6 +79,17 @@ export default function HostMenuDrawer({ open, onClose }) {
                   </button>
                 </div>
               </div>
+
+              <Link to="/" className="host-drawer__switch-banner" onClick={onClose}>
+                <span className="host-drawer__switch-banner-icon" aria-hidden="true">
+                  <Icon icon={Home} size={ICON.md} />
+                </span>
+                <span className="host-drawer__switch-banner-text">
+                  <strong>Switch to guest</strong>
+                  <span>Browse stays and manage trips</span>
+                </span>
+                <Icon icon={ChevronRight} size={ICON.md} className="host-drawer__switch-banner-chevron" />
+              </Link>
 
               <Link to="/host/rooms/add" className="host-drawer__cta" onClick={onClose}>
                 <div className="host-drawer__cta-art" aria-hidden="true">

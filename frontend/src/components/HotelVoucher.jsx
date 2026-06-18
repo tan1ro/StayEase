@@ -214,7 +214,7 @@ export default function HotelVoucher({ booking, room, invoice, hostPhone, qrData
           <li>StayEase acts as an intermediary between you and the host for this reservation.</li>
           <li>Date changes and guest count updates are subject to availability and price difference.</li>
           <li>Refunds, when applicable, are credited to the original payment method.</li>
-          <li>See <Link to="/terms#cancellation">Terms of Service</Link> for full details.</li>
+          <li>See <Link to="/help/cancellation">Cancellation policy</Link> for full details.</li>
         </ul>
       </section>
 

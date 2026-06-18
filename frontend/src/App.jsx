@@ -54,6 +54,12 @@ import TermsOfService from './pages/shared/TermsOfService';
 import LocalLaws from './pages/shared/help/LocalLaws';
 import NondiscriminationPolicy from './pages/shared/help/NondiscriminationPolicy';
 import ServiceFees from './pages/shared/help/ServiceFees';
+import CancellationPolicy from './pages/shared/help/CancellationPolicy';
+import BillingGst from './pages/shared/help/BillingGst';
+import InvoicesReceipts from './pages/shared/help/InvoicesReceipts';
+import TouristGuidelines from './pages/shared/help/TouristGuidelines';
+import HostGuidelines from './pages/shared/help/HostGuidelines';
+import HostingResponsibly from './pages/shared/help/HostingResponsibly';
 import Notifications from './pages/shared/Notifications';
 import HelpCentre from './pages/shared/HelpCentre';
 import LiveChat from './components/LiveChat';
@@ -153,6 +159,12 @@ function Layout() {
           <Route path="/cookie-policy" element={<CookiePolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/help" element={<HelpCentre />} />
+          <Route path="/help/cancellation" element={<CancellationPolicy />} />
+          <Route path="/help/billing-gst" element={<BillingGst />} />
+          <Route path="/help/invoices" element={<InvoicesReceipts />} />
+          <Route path="/help/tourist-guidelines" element={<TouristGuidelines />} />
+          <Route path="/help/host-guidelines" element={<HostGuidelines />} />
+          <Route path="/help/hosting-responsibly" element={<HostingResponsibly />} />
           <Route path="/help/local-laws" element={<LocalLaws />} />
           <Route path="/help/nondiscrimination" element={<NondiscriminationPolicy />} />
           <Route path="/help/service-fees" element={<ServiceFees />} />

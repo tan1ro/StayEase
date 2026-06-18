@@ -51,6 +51,35 @@ function scrollToSection(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+async function payBookingWithRetry(bookingId, retries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      const { data } = await bookingsApi.pay(bookingId);
+      return data;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function settleBatchPayment(bookings) {
+  const paidBookings = [];
+  for (const booking of bookings) {
+    if (booking.payment_status === 'paid') {
+      paidBookings.push(booking);
+      continue;
+    }
+    const paid = await payBookingWithRetry(booking._id);
+    paidBookings.push(paid);
+  }
+  return paidBookings;
+}
+
 export default function BookRoom() {
   const { roomId } = useParams();
   const [searchParams] = useSearchParams();
@@ -87,6 +116,7 @@ export default function BookRoom() {
   const [waitlistError, setWaitlistError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [pendingVerificationPayload, setPendingVerificationPayload] = useState(null);
+  const [pendingPaymentBookingIds, setPendingPaymentBookingIds] = useState(null);
 
   const dateValidationError = useMemo(() => {
     if (!checkIn || !checkOut) return '';
@@ -227,27 +257,54 @@ export default function BookRoom() {
     setError('');
     setConflictError('');
     setShowWaitlistForm(false);
+    const pricingSnapshot = pricing;
+
     try {
-      const { data } = await bookingsApi.createBatch({
-        room_ids: activeRoomIds,
-        check_in_date: checkIn,
-        check_out_date: checkOut,
-        num_guests: totalGuests,
-        offer_code: activeOfferCode || undefined,
-        ...pendingVerificationPayload,
-      });
-      const paidBookings = [];
-      for (const booking of data.bookings) {
-        const { data: paid } = await bookingsApi.pay(booking._id);
-        paidBookings.push(paid);
+      let bookingsToSettle;
+      let allPaidFromServer = false;
+
+      if (pendingPaymentBookingIds?.length) {
+        bookingsToSettle = pendingPaymentBookingIds.map((id) => ({
+          _id: id,
+          payment_status: 'pending',
+        }));
+      } else {
+        const { data } = await bookingsApi.createBatch({
+          room_ids: activeRoomIds,
+          check_in_date: checkIn,
+          check_out_date: checkOut,
+          num_guests: totalGuests,
+          offer_code: activeOfferCode || undefined,
+          ...pendingVerificationPayload,
+        });
+        bookingsToSettle = Array.isArray(data?.bookings) ? data.bookings : [];
+        allPaidFromServer = Boolean(data?.all_paid);
+        if (!bookingsToSettle.length) {
+          setError('Booking could not be completed. Please try again.');
+          return;
+        }
+        setPendingPaymentBookingIds(bookingsToSettle.map((booking) => booking._id));
       }
+
+      const paidBookings = allPaidFromServer
+        && bookingsToSettle.every((booking) => booking.payment_status === 'paid')
+        ? bookingsToSettle
+        : await settleBatchPayment(bookingsToSettle);
+
+      if (!paidBookings.every((booking) => booking.payment_status === 'paid')) {
+        setError('Payment did not complete. Your rooms are reserved — tap confirm to retry payment.');
+        return;
+      }
+
       setConfirmOpen(false);
+      setPendingPaymentBookingIds(null);
       setConfirmedBookings(paidBookings);
-      setConfirmedPricing(pricing);
+      setConfirmedPricing(pricingSnapshot);
     } catch (err) {
       if (err.normalized?.status === 409) {
         setConflictError(err.normalized.message || 'Room not available for selected dates');
         setShowWaitlistForm(true);
+        setPendingPaymentBookingIds(null);
         const name = guestVerification.bookingFor === 'other'
           ? guestVerification.stayingGuestName
           : user?.name;
@@ -257,12 +314,19 @@ export default function BookRoom() {
         setWaitlistName(name || '');
         setWaitlistPhone(phone || '');
         setError('');
+        setConfirmOpen(false);
+      } else if (pendingPaymentBookingIds?.length) {
+        setError(
+          err.normalized?.message
+            || 'Payment could not be completed. Your rooms are reserved — tap confirm to retry payment.',
+        );
       } else if (err.normalized) {
         setError(err.normalized.message);
+        setConfirmOpen(false);
       } else {
         setError('Booking failed');
+        setConfirmOpen(false);
       }
-      setConfirmOpen(false);
     } finally {
       setSubmitting(false);
     }
@@ -582,7 +646,7 @@ export default function BookRoom() {
           <div className="book-room__summary-policy">
             <strong>Free cancellation</strong>
             <p>Cancel before check-in for a full refund on eligible bookings.</p>
-            <Link to="/terms#cancellation">Full policy</Link>
+            <Link to="/help/cancellation">Full policy</Link>
           </div>
 
           <div className="book-room__summary-rows">

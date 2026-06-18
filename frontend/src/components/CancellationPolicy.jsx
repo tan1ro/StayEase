@@ -35,7 +35,7 @@ export default function CancellationPolicy({ policy = 'moderate', compact = fals
         <Info size={14} />
         <span>
           <strong>{details.title}</strong> cancellation policy applies.
-          <Link to="/terms#cancellation"> Learn more</Link>
+          <Link to="/help/cancellation"> Learn more</Link>
         </span>
       </p>
     );

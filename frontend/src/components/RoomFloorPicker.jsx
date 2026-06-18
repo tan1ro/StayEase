@@ -269,33 +269,35 @@ export default function RoomFloorPicker({
         </span>
       </div>
 
-      <div className="room-floor-picker__map">
-        {floorGroups.map(({ floor, label, rooms }) => (
-          <div key={floor} className="room-floor-picker__row">
-            <div className="room-floor-picker__floor">
-              <span className="room-floor-picker__floor-num">{floor <= 0 ? 'G' : floor}</span>
-              <span className="room-floor-picker__floor-label">{label}</span>
+      <div className="room-floor-picker__map-scroll">
+        <div
+          className="room-floor-picker__map"
+          style={{ '--tile-columns': maxRoomsPerFloor }}
+        >
+          {floorGroups.map(({ floor, label, rooms }) => (
+            <div key={floor} className="room-floor-picker__row">
+              <div className="room-floor-picker__floor">
+                <span className="room-floor-picker__floor-num">{floor <= 0 ? 'G' : floor}</span>
+                <span className="room-floor-picker__floor-label">{label}</span>
+              </div>
+              <div className="room-floor-picker__tiles">
+                {rooms.map((room) => (
+                  <RoomTile
+                    key={room._id}
+                    room={room}
+                    isSelected={activeSelectedIds.includes(room._id)}
+                    canSelect={canToggleRoom(room, activeSelectedIds, allRooms)}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                    onToggleRoom={handleToggleRoom}
+                    onSelectRoom={onSelectRoom}
+                    multiSelect={multiSelect}
+                  />
+                ))}
+              </div>
             </div>
-            <div
-              className="room-floor-picker__tiles"
-              style={{ '--tile-columns': maxRoomsPerFloor }}
-            >
-              {rooms.map((room) => (
-                <RoomTile
-                  key={room._id}
-                  room={room}
-                  isSelected={activeSelectedIds.includes(room._id)}
-                  canSelect={canToggleRoom(room, activeSelectedIds, allRooms)}
-                  checkIn={checkIn}
-                  checkOut={checkOut}
-                  onToggleRoom={handleToggleRoom}
-                  onSelectRoom={onSelectRoom}
-                  multiSelect={multiSelect}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <ul className="room-floor-picker__legend">

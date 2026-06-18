@@ -29,9 +29,9 @@ export default function HostTopNav({ onMenuOpen }) {
         </nav>
 
         <div className="host-topnav__actions">
-          <Link to="/" className="host-topnav__switch">Switch to guest</Link>
+          <Link to="/" className="host-topnav__switch hide-mobile">Switch to guest</Link>
           <ThemeToggle />
-          <button type="button" className="host-topnav__avatar" aria-label="Open host menu" onClick={onMenuOpen}>
+          <button type="button" className="host-topnav__avatar hide-mobile" aria-label="Open host menu" onClick={onMenuOpen}>
             {initial}
           </button>
           <button type="button" className="host-topnav__menu-btn hide-desktop" onClick={onMenuOpen} aria-label="Menu">

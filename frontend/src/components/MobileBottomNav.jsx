@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Calendar, Compass, Heart, Search, User } from 'lucide-react';
+import { Calendar, Compass, Heart, Search, User, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchModal } from '../context/SearchModalContext';
 import { Icon, ICON } from './ui/Icon';
@@ -8,9 +8,9 @@ import { Icon, ICON } from './ui/Icon';
 const HIDDEN_PREFIXES = ['/host', '/login', '/register', '/book/', '/receipt/'];
 
 export default function MobileBottomNav() {
-  const { user } = useAuth();
+  const { user, canAccessHostPortal } = useAuth();
   const location = useLocation();
-  const { openSearch } = useSearchModal();
+  const { openSearch, open: searchOpen } = useSearchModal();
 
   if (HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p))) {
     return null;
@@ -31,9 +31,10 @@ export default function MobileBottomNav() {
       </Link>
       <button
         type="button"
-        className="mobile-bottom-nav__item"
+        className={`mobile-bottom-nav__item${searchOpen ? ' mobile-bottom-nav__item--active' : ''}`}
         onClick={openSearch}
         aria-label="Search"
+        aria-pressed={searchOpen}
       >
         <Icon icon={Search} size={ICON.md} />
         <span>Search</span>
@@ -52,6 +53,15 @@ export default function MobileBottomNav() {
         <Icon icon={Heart} size={ICON.md} />
         <span>Saved</span>
       </Link>
+      {canAccessHostPortal && (
+        <Link
+          to="/host"
+          className={`mobile-bottom-nav__item${isActive('/host') ? ' mobile-bottom-nav__item--active' : ''}`}
+        >
+          <Icon icon={Building2} size={ICON.md} />
+          <span>Host</span>
+        </Link>
+      )}
       <Link
         to={user ? '/settings' : '/login'}
         className={`mobile-bottom-nav__item${isActive('/settings') || isActive('/login') ? ' mobile-bottom-nav__item--active' : ''}`}

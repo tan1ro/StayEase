@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ExternalLink, Github, Globe, Instagram, Linkedin, Twitter } from 'lucide-react';
 import Logo from './Logo';
 import { APP_NAME } from '../theme';
+import { FOOTER_COLUMNS } from '../constants/siteNav';
 import { Icon, ICON } from './ui/Icon';
 
 const DEVELOPER = {
@@ -9,35 +10,6 @@ const DEVELOPER = {
   github: 'https://github.com/tan1ro',
   portfolio: 'https://nandeesh-kantli.vercel.app/',
 };
-
-const supportLinks = [
-  { to: '/', label: 'Stays' },
-  { to: '/find-my-room', label: 'Find My Room' },
-  { to: '/wishlist', label: 'Wishlist' },
-  { to: '/bookings', label: 'My bookings' },
-  { to: '/settings', label: 'Profile' },
-  { to: '/terms#cancellation', label: 'Cancellation options' },
-];
-
-const hostingLinks = [
-  { to: '/host/rooms/add', label: 'List your room' },
-  { to: '/host', label: 'Host dashboard' },
-  { to: '/host/rooms', label: 'Manage rooms' },
-  { to: '/host/bookings', label: 'Manage bookings' },
-  { to: '/host?tab=earnings', label: 'Earnings' },
-  { to: '/host/payouts', label: 'Payouts' },
-  { to: '/terms#host', label: 'Hosting responsibly' },
-];
-
-const companyLinks = [
-  { to: '/privacy-policy', label: 'Privacy' },
-  { to: '/cookie-policy', label: 'Cookies' },
-  { to: '/terms', label: 'Terms' },
-  { to: '/terms#billing', label: 'Billing & GST' },
-  { to: '/terms#invoices', label: 'Invoices & receipts' },
-    { to: '/terms#tourist', label: 'Tourist guidelines' },
-  { to: '/terms#host', label: 'Host guidelines' },
-];
 
 function FooterColumn({ title, links }) {
   return (
@@ -56,15 +28,15 @@ function FooterColumn({ title, links }) {
 
 export default function Footer() {
   return (
-    <footer className="footer hide-mobile">
+    <footer className="footer">
       <div className="footer__inner">
         <div className="footer__brand">
           <Logo variant="full" />
           <p className="footer__tagline">Find your perfect stay, anywhere in India.</p>
         </div>
-        <FooterColumn title="Support" links={supportLinks} />
-        <FooterColumn title="Hosting" links={hostingLinks} />
-        <FooterColumn title={APP_NAME} links={companyLinks} />
+        {FOOTER_COLUMNS.map(({ title, links }) => (
+          <FooterColumn key={title} title={title} links={links} />
+        ))}
       </div>
       <div className="footer__credit">
         <p className="footer__credit-text">
@@ -111,7 +83,7 @@ export default function Footer() {
             <span aria-hidden="true">·</span>
             <Link to="/help">Help</Link>
             <span aria-hidden="true">·</span>
-            <Link to="/terms#billing">Billing</Link>
+            <Link to="/help/billing-gst">Billing</Link>
           </span>
         </div>
         <div className="footer__bottom-right">
