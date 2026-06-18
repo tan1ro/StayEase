@@ -48,7 +48,7 @@ jobs:
           ALLOWED_ORIGINS=http://localhost:5173
           EOF
       - name: Run backend tests with coverage
-        run: cd backend && pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+        run: cd backend && python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
       - uses: actions/upload-artifact@v4
         if: always()
         with:

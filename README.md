@@ -2,100 +2,283 @@
 
 ## Overview
 
-StayEase is a full-stack hotel booking platform built for the Indian market, with separate **Guest** and **Host** portals. Guests can search rooms with rich filters, book stays with GST-inclusive pricing, manage trips, write reviews, and save favourites. Hosts can list rooms, manage bookings, run promotional offers, and track occupancy and revenue through an analytics dashboard.
-
-The backend is a FastAPI REST API backed by MongoDB Atlas (Motor async driver). The frontend is a React + Vite single-page application with JWT authentication, responsive UI, and real-time price previews.
+StayEase is a full-stack hotel booking platform built with FastAPI and React, modelled after Airbnb. It has two portals: a **Guest Portal** for searching and booking rooms, and a **Host Portal** for managing rooms, bookings, analytics, and offers.
 
 ## Features
 
 ### Guest Portal
 
-- Browse and search rooms with filters (category, price, dates, guests, food preference, smoking/alcohol policy, view type, balcony)
-- Smart Room Recommender with match % scoring based on preferences
-- Live GST-inclusive price preview with dynamic pricing (weekends, peak season, early-bird, offers)
-- Secure booking flow with guest identity verification (Aadhar / PAN / Passport)
-- Trip history with status filters, search, cancellation, and post-checkout reviews
-- Wishlist to save favourite rooms
-- Waitlist join when a room is unavailable — auto-notified on cancellation
-- Nearby attractions by city with category tabs and live Open-Meteo weather widget
-- Printable GST invoice and receipt (ReportLab PDF)
-- Referral credits applied at checkout
-- In-app notifications and email / WhatsApp booking alerts
-- Host messaging and listing inquiries
+- Search and filter rooms by city, type, price, amenities
+- Smart Room Recommender with match % scoring
+- Room detail with photos, weather widget, nearby attractions
+- Book a room with live dynamic pricing breakdown
+- GST-compliant invoice generated after payment
+- Booking history with cancel and review options
+- Wishlist (save rooms)
+- Referral system with credits
+- Guest profile with spend dashboard
 
 ### Host Portal
 
-- Dashboard with room counts, booking stats, revenue, and occupancy metrics
-- Create and manage room listings (photos, videos, amenities, policies, blocked dates)
-- Manage incoming bookings with status tabs and cancellation handling
-- Promotional offers and coupon codes (percentage / flat discounts)
-- Occupancy and revenue analytics with monthly charts
-- Guest inquiry inbox with reply thread
-- Host public profile page with reviews
-- Listing reports and moderation support
+- Add, edit, delete rooms with photo/video upload
+- Manage all bookings with filter and export
+- Occupancy and revenue analytics with charts
+- Create and manage offer codes
+- Payout history
 
 ### Unique Features
 
 - Smart Room Recommender with match % scoring
 - Dynamic Pricing Engine (weekend/peak/early-bird)
-- Guest Reviews & Ratings (unlocked post-checkout)
-- Nearby Attractions + Live Weather
+- Guest Reviews & Ratings (unlocked post-checkout only)
+- Nearby Attractions + Live Weather via Open-Meteo
 - Waitlist System with auto-promote on cancellation
-- Occupancy Analytics Dashboard
-- Printable GST Invoice & Receipt
+- Occupancy Analytics Dashboard with Recharts
+- Printable GST Tax Invoice (CGST + SGST split)
+- WhatsApp booking reminders via Twilio
+- Dark / Light theme toggle
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | FastAPI (Python) |
+| Backend | FastAPI (Python 3.11) |
 | Database | MongoDB Atlas (Motor async) |
 | Frontend | React.js (Vite) |
-| Auth | JWT (python-jose + passlib) |
+| Auth | JWT (python-jose + passlib bcrypt) |
 | Email | FastAPI-Mail |
 | WhatsApp | Twilio API |
 | File Upload | Cloudinary |
 | PDF | ReportLab |
 | CI/CD | GitHub Actions |
-| Testing | Pytest + Vitest |
+| Deployment | Vercel (frontend, free) + Render or Fly.io (API, free) + Atlas (DB, free) |
+| Testing | Pytest + Vitest + React Testing Library |
+
+**Live demo:** [https://stay-ease-nandeesh.vercel.app/](https://stay-ease-nandeesh.vercel.app/) (frontend on Vercel)
 
 ## Prerequisites
 
-- Python 3.11+
-- Node.js 20+
-- MongoDB Atlas account (free tier works)
+- Python 3.11+ (local dev without Docker)
+- Node.js 20+ (local frontend dev)
+- Docker & Docker Compose (recommended for API)
+- MongoDB Atlas account (production) or local Mongo via Docker Compose (development)
 - Git
+- [Vercel](https://vercel.com) account (frontend hosting)
+
+## Deployment Architecture
+
+```
+┌─────────────────────┐         HTTPS          ┌──────────────────────┐
+│  Vercel (React SPA) │  ───────────────────►  │  Render / Fly.io     │
+│  frontend/          │      REST + JWT        │  backend/ (FastAPI)  │
+└─────────────────────┘                        └──────────┬───────────┘
+                                                          │
+                                                          ▼
+                                               ┌──────────────────────┐
+                                               │  MongoDB Atlas       │
+                                               └──────────────────────┘
+```
+
+- **Frontend** → [Vercel](https://vercel.com) (free)
+- **Backend** → [Render](https://render.com) free tier (recommended) or [Fly.io](https://fly.io) free allowance
+- **Database** → [MongoDB Atlas](https://cloud.mongodb.com) M0 (free forever)
+
+## Free Hosting (zero cost)
+
+Deploy the full stack without paying for servers:
+
+| Layer | Platform | Free tier | Notes |
+|-------|----------|-----------|-------|
+| Frontend | [Vercel](https://vercel.com) | Hobby (free) | Static Vite build from `frontend/` |
+| Backend API | [Render](https://render.com) | Free web service | Sleeps after ~15 min idle; cold start ~30–60s |
+| Database | [MongoDB Atlas](https://cloud.mongodb.com) | M0 cluster | 512 MB storage, shared |
+
+**Recommended order:** Atlas → Render (API) → Vercel (frontend) → update CORS → seed database.
+
+### 1. MongoDB Atlas (free)
+
+1. Create a free **M0** cluster at [cloud.mongodb.com](https://cloud.mongodb.com).
+2. Add a database user and whitelist `0.0.0.0/0` (Network Access).
+3. Copy the connection string → this becomes `MONGO_URI`.
+
+### 2. Backend on Render (free)
+
+1. Push this repo to GitHub.
+2. Go to [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**.
+3. Connect the repo — Render reads `render.yaml` at the repo root.
+4. In the service **Environment** tab, set:
+
+   | Variable | Value |
+   |----------|-------|
+   | `MONGO_URI` | Your Atlas connection string |
+   | `ALLOWED_ORIGINS` | `https://stay-ease-nandeesh.vercel.app,http://localhost:5173` |
+   | `FRONTEND_URL` | `https://stay-ease-nandeesh.vercel.app` |
+   | `JWT_SECRET` | Auto-generated by Blueprint, or set your own |
+   | `MAIL_*`, `CLOUDINARY_*`, `TWILIO_*` | Optional; leave blank to disable those features |
+
+5. Deploy. Your API URL will be like `https://stayease-api.onrender.com`.
+6. Verify: open `https://stayease-api.onrender.com/health` → `{"status":"ok"}`.
+
+**Seed demo data** (run once from your laptop, pointing at Atlas):
+
+```bash
+cd backend
+cp .env.example .env
+# Set MONGO_URI to the same Atlas string used on Render
+python seed.py
+```
+
+**Cold starts:** Render free tier sleeps when idle. The first request after sleep may take 30–60 seconds. Optional: ping `/health` every 14 minutes with [cron-job.org](https://cron-job.org) (free) to keep the service warm.
+
+### 3. Frontend on Vercel (free)
+
+1. [vercel.com/new](https://vercel.com/new) → import the same GitHub repo.
+2. Set **Root Directory** to `frontend`.
+3. Add environment variable:
+
+   | Name | Value |
+   |------|-------|
+   | `VITE_API_BASE_URL` | `https://stayease-api.onrender.com` |
+
+4. Deploy. Copy your Vercel URL — currently **https://stay-ease-nandeesh.vercel.app**.
+5. Go back to Render → **Environment** → set `ALLOWED_ORIGINS` and `FRONTEND_URL` to `https://stay-ease-nandeesh.vercel.app` → **Manual Deploy**.
+
+### Alternative: Fly.io (free allowance)
+
+If Render is unavailable in your region:
+
+```bash
+cd backend
+fly launch --no-deploy          # uses backend/fly.toml
+fly secrets set MONGO_URI="..." JWT_SECRET="..." ALLOWED_ORIGINS="https://stay-ease-nandeesh.vercel.app" FRONTEND_URL="https://stay-ease-nandeesh.vercel.app"
+fly deploy
+```
+
+API URL: `https://stayease-api.fly.dev`
+
+## Docker — Local Development
+
+Runs MongoDB + API. Run the frontend locally with `npm run dev` (or deploy it to Vercel).
+
+```bash
+# 1. Configure backend env (at minimum JWT_SECRET; compose overrides MONGO_URI for local Mongo)
+cp backend/.env.example backend/.env
+
+# 2. Start MongoDB + API
+docker compose up --build
+
+# 3. Seed demo data (once, from host machine)
+cd backend && python seed.py
+
+# 4. Frontend (separate terminal)
+cd frontend && npm install && npm run dev
+```
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8000 |
+| Swagger | http://localhost:8000/docs |
+| MongoDB | mongodb://localhost:27017 |
+
+Stop containers:
+
+```bash
+docker compose down
+```
+
+## Docker — Production API
+
+Uses MongoDB Atlas from `backend/.env` (no local Mongo container).
+
+```bash
+cp backend/.env.example backend/.env
+# Set MONGO_URI, JWT_SECRET, ALLOWED_ORIGINS, FRONTEND_URL, and third-party keys
+
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+Build the image manually:
+
+```bash
+docker build -t stayease-api ./backend
+docker run --rm -p 8000:8000 --env-file backend/.env stayease-api
+```
+
+### Production environment variables (backend)
+
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `MONGO_URI` | `mongodb+srv://...` | MongoDB Atlas connection string |
+| `JWT_SECRET` | long random string | Required |
+| `ALLOWED_ORIGINS` | `https://stay-ease-nandeesh.vercel.app,http://localhost:5173` | Comma-separated CORS origins |
+| `FRONTEND_URL` | `https://stay-ease-nandeesh.vercel.app` | Used in emails and referral links |
+| `CLOUDINARY_*` | Cloudinary credentials | Photo/video uploads |
+| `MAIL_*` | SMTP settings | Booking emails |
+| `TWILIO_*` | Twilio credentials | WhatsApp alerts |
+
+## Deploy Frontend on Vercel
+
+See [Free Hosting](#free-hosting-zero-cost) above for the full zero-cost walkthrough. Quick reference:
+
+1. Push the repo to GitHub.
+2. Import the project in [Vercel](https://vercel.com/new).
+3. Set **Root Directory** to `frontend`.
+4. Framework preset: **Vite** (auto-detected via `frontend/vercel.json`).
+5. Add environment variable:
+
+   | Name | Value |
+   |------|-------|
+   | `VITE_API_BASE_URL` | `https://your-api-domain.com` |
+
+6. Deploy.
+
+`frontend/vercel.json` configures SPA routing so React Router paths (e.g. `/host`, `/bookings`) work on refresh.
+
+After the first deploy, update backend `ALLOWED_ORIGINS` and `FRONTEND_URL` with your Vercel URL, then redeploy/restart the API container.
+
+### Vercel CLI (optional)
+
+```bash
+cd frontend
+npm i -g vercel
+vercel --prod
+# Set VITE_API_BASE_URL when prompted or in the Vercel dashboard
+```
+
+## Deploy Backend
+
+### Free — Render (recommended)
+
+Use the [Render Blueprint](#2-backend-on-render-free) steps above (`render.yaml` is included in the repo).
+
+### Free — Fly.io
+
+See [Fly.io alternative](#alternative-flyio-free-allowance) above (`backend/fly.toml` is included).
+
+### Self-hosted Docker (VPS / local server)
 
 ## MongoDB Atlas Setup
 
-Step-by-step instructions:
-
-1. Create an account at [cloud.mongodb.com](https://cloud.mongodb.com)
-2. Create a free **M0** cluster
-3. Add a database user with **read/write** access
-4. Add **0.0.0.0/0** to the IP whitelist (Network Access → Add IP Address)
-5. Get your connection string from **Connect → Drivers** (choose Python / Motor)
-6. Replace `<password>` and `<dbname>` in the URI with your credentials
-
-Example URI format:
-
-```
-mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-```
+1. Create account at [cloud.mongodb.com](https://cloud.mongodb.com)
+2. Create free M0 cluster (any region)
+3. Add database user with read/write access
+4. Network access: Add `0.0.0.0/0` to IP whitelist
+5. Connect → Drivers → Python → copy connection string
+6. Replace `<password>` with your DB user password
 
 ## Backend Setup
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
 # Fill in MONGO_URI, MONGO_DB_NAME=stayease, JWT_SECRET
 python seed.py
 uvicorn main:app --reload
-# API runs at http://localhost:8000
-# Swagger docs at http://localhost:8000/docs
+# API: http://localhost:8000
+# Swagger: http://localhost:8000/docs
 ```
 
 ## Frontend Setup
@@ -106,114 +289,149 @@ npm install
 cp .env.example .env
 # Set VITE_API_BASE_URL=http://localhost:8000
 npm run dev
-# App runs at http://localhost:5173
+# App: http://localhost:5173
 ```
 
 ## Demo Credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| Guest | guest@stayease.com | Demo@123 |
-| Host | host@stayease.com | demo123 |
+| Role | Email | Password | Description |
+|------|-------|----------|-------------|
+| Guest | nandeesh@stayease.com | Password1! | Power user, many bookings |
+| Guest | priya@stayease.com | Password1! | New user with referral |
+| Guest | arjun@stayease.com | Password1! | Business traveller |
+| Guest | meera@stayease.com | Password1! | Frequent reviewer |
+| Guest | rahul@stayease.com | Password1! | Budget traveller |
+| Host | rajesh@stayease.com | Password1! | 12 rooms, Bangalore hotels |
+| Host | sunshine@stayease.com | Password1! | 10 rooms, Bangalore homestays |
+| Host | prestige@stayease.com | Password1! | 8 luxury suites and villas |
+| Host | budgethost@stayease.com | Password1! | 11 budget rooms and dorms |
+| Host | villahost@stayease.com | Password1! | 9 villas (Bangalore + Nandi Hills) |
+| Host | goahost@stayease.com | Password1! | 6 North Goa homestays and beach stays |
+| Host | mumbaihost@stayease.com | Password1! | 6 Mumbai city stays and dorms |
+| Host | coorghost@stayease.com | Password1! | 5 Coorg estate homestays |
+| Admin | admin@stayease.com | Password1! | Full access |
 
-Run `python seed.py` in the backend folder to create these accounts along with 5 sample rooms, 2 bookings, and 2 offers.
+Run `python seed.py` in the backend folder to load all demo data (14 users, 67 rooms, 80 bookings, reviews, offers, and more).
+
+### Suggested destinations (search picker)
+
+After seeding, each destination in the home-page **Where** picker has listings:
+
+| Destination | Listings | Highlights |
+|-------------|----------|------------|
+| Bangalore, Karnataka | 46 | Singles, doubles, suites, homestays, dorms |
+| North Goa, Goa | 6 | Beach homestays, sea-view suite, pool villa, dorm |
+| Nandi Hills, Karnataka | 4 | Hill villa, suite, homestay, double |
+| Mumbai, Maharashtra | 6 | Heritage homestay, business rooms, backpacker dorms |
+| Coorg, Karnataka | 5 | Coffee estate homestays and plantation villa |
+
+Use **Near** on any destination to search within 50 km of that area’s coordinates.
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/auth/register` | Register a new guest or host account |
-| POST | `/api/auth/login` | Login and receive JWT access token |
-| GET | `/api/auth/me` | Get current authenticated user profile |
-| PATCH | `/api/auth/profile` | Update profile (name, phone, avatar, preferences) |
-| POST | `/api/auth/verify-identity` | Upload identity document for verification |
-| POST | `/api/auth/verify-email` | Verify email with OTP |
-| POST | `/api/auth/resend-otp` | Resend email verification OTP |
-| GET | `/api/rooms` | List/search rooms with filters |
-| POST | `/api/rooms` | Create a new room listing (host) |
-| POST | `/api/rooms/recommend` | Smart room recommender with match scores |
-| GET | `/api/rooms/host/{host_id}` | List all rooms for a host |
-| GET | `/api/rooms/{id}` | Get room details by ID |
-| GET | `/api/rooms/{id}/alternatives` | Similar available rooms for given dates |
-| GET | `/api/rooms/{id}/rating` | Aggregated rating summary for a room |
-| PATCH | `/api/rooms/{id}` | Update room listing (host) |
-| DELETE | `/api/rooms/{id}` | Delete room listing (host) |
-| POST | `/api/rooms/{id}/photos` | Upload room photo to Cloudinary |
-| DELETE | `/api/rooms/{id}/photos/{pid}` | Delete a room photo |
-| PATCH | `/api/rooms/{id}/photos/{pid}/primary` | Set primary photo |
-| PATCH | `/api/rooms/{id}/photos/reorder` | Reorder room photos |
-| POST | `/api/rooms/{id}/videos` | Upload room video |
-| DELETE | `/api/rooms/{id}/videos/{vid}` | Delete room video |
-| POST | `/api/rooms/{id}/inquiries` | Send inquiry message to host |
-| POST | `/api/rooms/{id}/reports` | Report a listing |
-| POST | `/api/bookings` | Create a new booking |
-| GET | `/api/bookings` | List bookings (filter by guest_id, host_id, status) |
-| GET | `/api/bookings/room/{id}` | List bookings for a room (host) |
-| GET | `/api/bookings/{id}` | Get booking details |
-| DELETE | `/api/bookings/{id}` | Cancel a booking |
-| GET | `/api/bookings/{id}/cancellation-preview` | Preview cancellation refund breakdown |
-| POST | `/api/bookings/{id}/pay` | Mark booking as paid and generate invoice PDF |
-| GET | `/api/bookings/{id}/receipt` | Get booking receipt data |
-| GET | `/api/bookings/{id}/invoice` | Get invoice details and PDF URL |
-| POST | `/api/bookings/verification-upload` | Upload guest verification document |
-| POST | `/api/pricing/calculate` | Calculate dynamic price with GST breakdown |
-| POST | `/api/reviews` | Submit a post-checkout review |
-| GET | `/api/reviews/room/{id}` | List reviews for a room |
-| GET | `/api/reviews/property/{room_id}` | Property-level review stats and list |
-| GET | `/api/reviews/booking/{booking_id}` | Review eligibility for a booking |
-| GET | `/api/reviews/eligible/room/{room_id}` | Check if current user can review a room |
-| PATCH | `/api/reviews/{id}/host-response` | Host reply to a review |
-| POST | `/api/offers` | Create promotional offer (host) |
-| GET | `/api/offers` | List offers |
-| GET | `/api/offers/{code}` | Get offer by code |
-| PATCH | `/api/offers/{id}` | Update offer |
-| DELETE | `/api/offers/{id}` | Delete offer |
-| POST | `/api/offers/validate` | Validate offer code against a room/dates |
-| GET | `/api/dashboard` | Role-aware dashboard stats (host or guest) |
-| GET | `/api/guest/dashboard` | Guest dashboard stats |
-| GET | `/api/host/dashboard` | Host dashboard stats |
-| GET | `/api/analytics/occupancy` | Monthly occupancy analytics (host) |
-| GET | `/api/analytics/revenue` | Monthly revenue analytics (host) |
-| POST | `/api/waitlist` | Join waitlist for unavailable dates |
-| GET | `/api/waitlist/{phone}` | Get waitlist entries by phone number |
-| DELETE | `/api/waitlist/{id}` | Remove waitlist entry |
-| POST | `/api/wishlist/{room_id}` | Toggle room on user wishlist |
-| GET | `/api/wishlist` | Get full room objects in wishlist |
-| GET | `/api/notifications` | List last 20 notifications for current user |
-| PATCH | `/api/notifications/{id}/read` | Mark notification as read |
-| POST | `/api/notifications/test-email` | Send test email (dev/admin) |
-| GET | `/api/attractions/{city}` | Nearby attractions for a city |
-| GET | `/api/weather/{lat}/{lon}` | Live weather proxy (Open-Meteo) |
-| GET | `/api/hosts/{host_id}/profile` | Public host profile with reviews |
-| GET | `/api/inquiries` | List guest/host inquiry threads |
-| POST | `/api/inquiries/{inquiry_id}/replies` | Reply to an inquiry |
-| GET | `/api/invoices/{booking_id}` | Get invoice by booking ID |
-| GET | `/api/referrals/my-code` | Get current user's referral code |
-| GET | `/api/referrals/stats` | Referral usage statistics |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/health` | Public | Health check |
+| POST | `/api/auth/register` | Public | Register guest or host account |
+| POST | `/api/auth/login` | Public | Login and receive JWT |
+| POST | `/api/auth/forgot-password` | Public | Request password reset email |
+| POST | `/api/auth/oauth/google` | Public | Google OAuth sign-in |
+| PATCH | `/api/auth/complete-profile` | JWT | Complete OAuth profile (phone, DOB) |
+| GET | `/api/auth/me` | JWT | Current user profile |
+| POST | `/api/auth/become-host` | JWT | Upgrade guest to host |
+| PATCH | `/api/auth/profile` | JWT | Update profile and preferences |
+| POST | `/api/auth/verify-identity` | JWT | Upload identity document |
+| POST | `/api/auth/verify-email` | JWT | Verify email with OTP |
+| POST | `/api/auth/resend-otp` | JWT | Resend email OTP |
+| GET | `/api/rooms` | Public | Search/list rooms with filters |
+| POST | `/api/rooms` | Host | Create room listing |
+| POST | `/api/rooms/recommend` | Public | Smart room recommender |
+| GET | `/api/rooms/host/{host_id}` | Public | Rooms by host |
+| GET | `/api/rooms/{id}` | Public | Room details |
+| GET | `/api/rooms/{id}/booked-dates` | Public | Booked date ranges |
+| GET | `/api/rooms/{id}/alternatives` | Public | Similar available rooms |
+| GET | `/api/rooms/{id}/rating` | Public | Room rating summary |
+| POST | `/api/rooms/{id}/inquiries` | JWT | Send inquiry to host |
+| POST | `/api/rooms/{id}/reports` | JWT | Report listing |
+| PATCH | `/api/rooms/{id}` | Host | Update listing |
+| DELETE | `/api/rooms/{id}` | Host | Delete listing |
+| POST | `/api/rooms/{id}/photos` | Host | Upload photo |
+| DELETE | `/api/rooms/{id}/photos/{pid}` | Host | Delete photo |
+| PATCH | `/api/rooms/{id}/photos/{pid}/primary` | Host | Set primary photo |
+| PATCH | `/api/rooms/{id}/photos/reorder` | Host | Reorder photos |
+| POST | `/api/rooms/{id}/videos` | Host | Upload video |
+| DELETE | `/api/rooms/{id}/videos/{vid}` | Host | Delete video |
+| POST | `/api/bookings` | JWT | Create booking |
+| POST | `/api/bookings/batch` | JWT | Create multi-room booking |
+| POST | `/api/bookings/verification-upload` | JWT | Upload guest ID for booking |
+| GET | `/api/bookings` | JWT | List bookings |
+| GET | `/api/bookings/room/{id}` | Host | Bookings for a room |
+| GET | `/api/bookings/{id}` | JWT | Booking details |
+| GET | `/api/bookings/{id}/cancellation-preview` | JWT | Cancellation refund preview |
+| DELETE | `/api/bookings/{id}` | JWT | Cancel booking |
+| POST | `/api/bookings/{id}/pay` | JWT | Mark booking paid (mock payment) |
+| GET | `/api/bookings/{id}/receipt` | JWT | Receipt data |
+| GET | `/api/bookings/{id}/invoice` | JWT | Invoice metadata |
+| GET | `/api/bookings/{id}/voucher/pdf` | JWT | Download hotel voucher PDF |
+| GET | `/api/bookings/{id}/tax-invoice/pdf` | JWT | Download GST tax invoice PDF |
+| POST | `/api/pricing/calculate` | Public | Dynamic price + GST breakdown |
+| POST | `/api/reviews` | JWT | Submit post-checkout review |
+| GET | `/api/reviews/eligible/room/{room_id}` | JWT | Review eligibility |
+| GET | `/api/reviews/property/{room_id}` | Public | Property reviews |
+| GET | `/api/reviews/room/{id}` | Public | Room reviews |
+| GET | `/api/reviews/booking/{booking_id}` | JWT | Review for booking |
+| PATCH | `/api/reviews/{id}/host-response` | Host | Reply to review |
+| POST | `/api/offers` | Host | Create offer |
+| GET | `/api/offers` | Public | List offers |
+| GET | `/api/offers/{code}` | Public | Get offer by code |
+| PATCH | `/api/offers/{id}` | Host | Update offer |
+| DELETE | `/api/offers/{id}` | Host | Delete offer |
+| POST | `/api/offers/validate` | Public | Validate offer code |
+| GET | `/api/dashboard` | JWT | Role-aware dashboard |
+| GET | `/api/guest/dashboard` | JWT | Guest spend dashboard |
+| GET | `/api/host/dashboard` | Host | Host dashboard stats |
+| GET | `/api/analytics/occupancy` | Host | Monthly occupancy chart |
+| POST | `/api/waitlist` | Public | Join waitlist |
+| GET | `/api/waitlist/{phone}` | Public | Waitlist by phone |
+| DELETE | `/api/waitlist/{id}` | JWT | Remove waitlist entry |
+| POST | `/api/wishlist/{room_id}` | JWT | Toggle wishlist |
+| GET | `/api/wishlist` | JWT | Get wishlist rooms |
+| GET | `/api/notifications` | JWT | List notifications |
+| PATCH | `/api/notifications/{id}/read` | JWT | Mark notification read |
+| POST | `/api/notifications/test-email` | Admin | Send test email |
+| GET | `/api/attractions/{city}` | Public | Nearby attractions |
+| GET | `/api/weather/{lat}/{lon}` | Public | Live weather (Open-Meteo) |
+| GET | `/api/hosts/{host_id}/profile` | Public | Host public profile |
+| GET | `/api/inquiries` | JWT | List inquiries |
+| GET | `/api/invoices/{booking_id}` | JWT | Invoice by booking |
+| GET | `/api/referrals/my-code` | JWT | Referral code and link |
+| GET | `/api/referrals/stats` | JWT | Referral statistics |
+| POST | `/api/chat/message` | Public | Chatbot message |
+| GET | `/api/chat/history` | Public | Chat history by session |
 
 ## Running Tests
 
 ```bash
-# Backend
 cd backend && pytest tests/ -v --cov
-
-# Frontend
 cd frontend && npm run test
 ```
 
 ## Assumptions Made
 
 - Payment gateway is mocked (mark as paid button)
-- WhatsApp requires Twilio sandbox setup
-- Cloudinary free tier used for photo/video storage
-- GST calculated per India hotel tariff slabs:
-  Below ₹1000/night → 0%, ₹1000–₹7500 → 12%, Above ₹7500 → 18%
-- Identity verification is manual (admin reviews uploaded docs)
+- WhatsApp requires Twilio sandbox approval
+- Cloudinary free tier for photo/video storage
+- GST per India hotel tariff slabs:
+  - Below ₹1,000/night: 0%
+  - ₹1,001–₹7,500/night: 5% (CGST 2.5% + SGST 2.5%)
+  - Above ₹7,500/night: 18% (CGST 9% + SGST 9%)
+  - Long-term dormitory stays (90+ nights, up to ₹20,000/month): 0%
+- Identity verification is manual
 - Referral credits applied as discount at checkout
+- Scheduled reminders use APScheduler in-process
 
 ## AI Tools Used
 
-I built this project using Claude (Anthropic) as my primary AI development partner and Cursor IDE with AI assistance for real-time code suggestions. Claude helped me design the full system architecture, generate FastAPI route handlers with proper async Motor MongoDB integration, build the React component tree, implement the GST calculation service following India's hotel tariff slabs, and design the double-booking prevention logic using date overlap queries. Cursor's inline AI suggestions accelerated writing repetitive boilerplate like Pydantic models and API layer functions.
+I built this project using Claude (Anthropic) as my primary AI development partner and Cursor IDE with AI assistance. Claude helped me design the full system architecture, generate FastAPI route handlers with Motor MongoDB, build the React component tree, implement the GST calculation service, and design double-booking prevention logic. Cursor accelerated writing Pydantic models and API layer functions.
 
-The most challenging part was converting synchronous route handlers to fully async Motor MongoDB calls while preserving FastAPI's dependency injection for JWT authentication. Claude helped me debug the lifespan context manager pattern for database connection management. Another challenge was implementing the dynamic pricing engine with correctly stacking multipliers — Claude walked me through the order of operations to ensure weekend surcharges, peak season adjustments, and offer code discounts applied in the right sequence.
+The most challenging part was converting synchronous handlers to fully async Motor MongoDB calls while preserving FastAPI dependency injection for JWT auth. Another challenge was implementing dynamic pricing with correctly stacking multipliers for weekend surcharges, peak season, and offer code discounts.

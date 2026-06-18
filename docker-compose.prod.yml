@@ -1,0 +1,17 @@
+# Production API (Render / Fly.io / VPS) — uses MongoDB Atlas
+# ALLOWED_ORIGINS: comma-separated, include your Vercel URL
+# Example Render URL: https://stayease-api.onrender.com
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stayease-api
+    env_file:
+      - ./backend/.env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

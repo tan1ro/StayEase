@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-const TOKEN_KEY = 'stayease_token';
-const LEGACY_TOKEN_KEY = 'stayease-token';
-const USER_KEY = 'stayease_user';
-const LEGACY_USER_KEY = 'stayease-user';
+const TOKEN_KEY = 'stayease-token';
+const LEGACY_TOKEN_KEY = 'stayease_token';
+const USER_KEY = 'stayease-user';
+const LEGACY_USER_KEY = 'stayease_user';
 
 export { API_BASE_URL, TOKEN_KEY, USER_KEY };
 
@@ -40,8 +40,10 @@ export function getStoredUser() {
 export function setStoredUser(user) {
   if (user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.removeItem(LEGACY_USER_KEY);
   } else {
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(LEGACY_USER_KEY);
   }
 }
 

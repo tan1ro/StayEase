@@ -9,4 +9,10 @@ dist/
 .DS_Store
 coverage/
 .nyc_output/
-
+*.log
+.env.local
+*.sqlite
+.cursor/plans
+prompt.md
+CASE_STUDY_SUBMISSION.md
+INTERVIEW_DOCUMENTATION.md

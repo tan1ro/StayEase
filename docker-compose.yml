@@ -1,5 +1,4 @@
-version: "3.9"
-
+# Local development: MongoDB + API (frontend runs separately or on Vercel)
 services:
   mongo:
     image: mongo:7
@@ -37,48 +36,22 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: stayease-api
     depends_on:
       mongo-init:
         condition: service_completed_successfully
+    env_file:
+      - ./backend/.env
     environment:
       MONGO_URI: mongodb://mongo:27017/?replicaSet=rs0
       MONGO_DB_NAME: stayease
-      JWT_SECRET: dev-secret-change-in-production
-      APP_NAME: StayEase
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
-      ALLOWED_ORIGINS: http://localhost:5173
-      MAIL_USERNAME: ""
-      MAIL_PASSWORD: ""
-      MAIL_FROM: noreply@stayease.com
-      MAIL_SERVER: smtp.gmail.com
-      MAIL_PORT: 587
-      MAIL_USE_TLS: "True"
-      TWILIO_ACCOUNT_SID: ""
-      TWILIO_AUTH_TOKEN: ""
-      TWILIO_WHATSAPP_FROM: whatsapp:+14155238886
-      CLOUDINARY_CLOUD_NAME: ""
-      CLOUDINARY_API_KEY: ""
-      CLOUDINARY_API_SECRET: ""
-      OPEN_METEO_BASE_URL: https://api.open-meteo.com
-      GST_RATE: "0.18"
-      GST_NUMBER: DEV_GST_NUMBER
+      ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       FRONTEND_URL: http://localhost:5173
-      JWT_EXPIRE_MINUTES: "10080"
     ports:
       - "8000:8000"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    depends_on:
-      - backend
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
-      VITE_APP_NAME: StayEase
-    ports:
-      - "5173:5173"
+    restart: unless-stopped
 
 volumes:
   mongo_data:

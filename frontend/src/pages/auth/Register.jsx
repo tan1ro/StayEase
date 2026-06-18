@@ -7,7 +7,7 @@ import BirthDatePicker from '../../components/BirthDatePicker';
 import Spinner from '../../components/Spinner';
 import CommunityCommitmentModal from '../../components/onboarding/CommunityCommitmentModal';
 import LegalAcceptance from '../../components/LegalAcceptance';
-import { authApi, setToken, setStoredUser } from '../../api/api';
+import { authApi, getToken, setToken, setStoredUser } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 import { userNeedsPhone } from '../../utils/auth';
 import { detectRegistrationRole, isHostRole, normalizeRole } from '../../utils/roles';
@@ -203,8 +203,7 @@ export default function Register() {
         referred_by: form.referred_by || undefined,
         date_of_birth: form.dateOfBirth,
       });
-      const token = localStorage.getItem('stayease_token');
-      if (token) setToken(token);
+      if (getToken()) setToken(getToken());
       setStoredUser(user);
       navigate(isHostRole(user.role) ? '/host' : '/');
     } catch (err) {

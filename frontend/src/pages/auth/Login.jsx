@@ -3,13 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import ErrorMessage from '../../components/ErrorMessage';
 import OAuthButtons from '../../components/OAuthButtons';
 import Spinner from '../../components/Spinner';
-import { setToken, setStoredUser } from '../../api/api';
+import { getToken, setToken, setStoredUser } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 import { userNeedsPhone } from '../../utils/auth';
 import { isHostRole, normalizeRole } from '../../utils/roles';
 
-const DEMO_GUEST = { email: 'guest@stayease.com', password: 'demo123' };
-const DEMO_HOST = { email: 'host@stayease.com', password: 'demo123' };
+const DEMO_GUEST = { email: 'nandeesh@stayease.com', password: 'Password1!' };
+const DEMO_HOST = { email: 'rajesh@stayease.com', password: 'Password1!' };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -63,8 +63,7 @@ export default function Login() {
     setFieldErrors({});
     try {
       const user = await login(creds.email.trim(), creds.password);
-      const token = localStorage.getItem('stayease_token');
-      if (token) setToken(token);
+      if (getToken()) setToken(getToken());
       setStoredUser(user);
       navigate(isHostRole(user.role) ? '/host' : '/');
     } catch (err) {
@@ -166,10 +165,10 @@ export default function Login() {
         <OAuthButtons disabled={loading} onSuccess={handleOAuthSuccess} onError={setError} />
         <div className="auth-card__demo-row">
           <button type="button" className="btn btn-outline btn-sm" disabled={loading} onClick={() => demoLogin(DEMO_GUEST)}>
-            Demo guest login
+            Login as Guest
           </button>
           <button type="button" className="btn btn-outline btn-sm" disabled={loading} onClick={() => demoLogin(DEMO_HOST)}>
-            Demo host login
+            Login as Host
           </button>
         </div>
         <p className="auth-card__footer">

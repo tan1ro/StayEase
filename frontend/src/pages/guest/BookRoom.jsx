@@ -347,6 +347,10 @@ export default function BookRoom() {
               <strong>{primaryBooking.total_nights}</strong>
             </div>
             <div className="book-room__summary-row">
+              <span>GST</span>
+              <strong>{formatCurrency(bookingPricing?.gst_amount || 0)}</strong>
+            </div>
+            <div className="book-room__summary-row">
               <span>Total paid</span>
               <strong>{formatCurrency(totalPaid)} (incl. GST)</strong>
             </div>
@@ -358,7 +362,7 @@ export default function BookRoom() {
           )}
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
             <Link to={`/receipt/${primaryBooking._id}`} className="btn btn-primary">
-              <Icon icon={Receipt} size={ICON.sm} /> Receipt &amp; Invoice
+              <Icon icon={Receipt} size={ICON.sm} /> Download Receipt
             </Link>
             <Link to="/bookings" className="btn btn-outline">View My Bookings</Link>
           </div>
@@ -474,10 +478,14 @@ export default function BookRoom() {
             <h2>4. Confirm &amp; pay</h2>
             <ErrorMessage message={error} />
             {conflictError && (
-              <div className="host-alert-banner" role="alert" style={{ marginBottom: '1rem' }}>
-                <span className="host-alert-banner__dot" aria-hidden="true" />
+              <div
+                className="host-alert-banner"
+                role="alert"
+                style={{ marginBottom: '1rem', borderColor: 'var(--danger, #dc2626)', background: 'rgba(220, 38, 38, 0.08)' }}
+              >
+                <span className="host-alert-banner__dot" aria-hidden="true" style={{ background: 'var(--danger, #dc2626)' }} />
                 <div>
-                  <strong>Room not available for selected dates</strong>
+                  <strong style={{ color: 'var(--danger, #dc2626)' }}>Room not available for selected dates</strong>
                   <p>{conflictError}</p>
                 </div>
               </div>
@@ -505,7 +513,7 @@ export default function BookRoom() {
             )}
             {waitlistSuccess && (
               <p style={{ color: 'var(--success, #16a34a)', marginBottom: '1rem' }}>
-                You&apos;re on the waitlist! We&apos;ll notify you when this room becomes available.
+                You&apos;re on the waitlist! We&apos;ll notify you.
               </p>
             )}
             <div className="book-room__offer">

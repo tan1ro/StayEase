@@ -1,0 +1,65 @@
+# Render Blueprint — free tier API deploy
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: stayease-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: StayEase
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: APP_PORT
+        value: "8000"
+      - key: MONGO_DB_NAME
+        value: stayease
+      - key: JWT_EXPIRE_MINUTES
+        value: "10080"
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USE_TLS
+        value: "True"
+      - key: OPEN_METEO_BASE_URL
+        value: https://api.open-meteo.com
+      - key: GST_RATE
+        value: "0.18"
+      - key: GUEST_PLATFORM_FEE_PERCENT
+        value: "10.0"
+      - key: HOST_PLATFORM_FEE_PERCENT
+        value: "3.0"
+      - key: TWILIO_WHATSAPP_FROM
+        value: whatsapp:+14155238886
+      # --- Set these in the Render dashboard after deploy ---
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: MAIL_USERNAME
+        value: ""
+      - key: MAIL_PASSWORD
+        value: ""
+      - key: MAIL_FROM
+        value: noreply@stayease.com
+      - key: TWILIO_ACCOUNT_SID
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        value: ""
+      - key: CLOUDINARY_CLOUD_NAME
+        value: ""
+      - key: CLOUDINARY_API_KEY
+        value: ""
+      - key: CLOUDINARY_API_SECRET
+        value: ""
+      - key: GST_NUMBER
+        value: ""
