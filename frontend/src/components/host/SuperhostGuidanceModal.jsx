@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const SUPERHOSTS = [
   { name: 'Priya Sharma', size: 88, top: '18%', left: '8%' },
@@ -26,7 +27,7 @@ export default function SuperhostGuidanceModal({ open, onStartAlone, onMatchSupe
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="listing-guidance-overlay" role="dialog" aria-modal="true" aria-labelledby="superhost-guidance-title">
       <div className="listing-guidance-modal">
         <div className="listing-guidance-modal__hero" aria-hidden="true">
@@ -66,6 +67,7 @@ export default function SuperhostGuidanceModal({ open, onStartAlone, onMatchSupe
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

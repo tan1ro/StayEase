@@ -100,7 +100,7 @@ describe('Home', () => {
     render(<MemoryRouter initialEntries={['/?city=Bangalore']}><Home /></MemoryRouter>);
     await waitFor(() => {
       expect(roomsApi.list).toHaveBeenCalled();
-      expect(screen.getByText(/1 room found/i)).toBeInTheDocument();
+      expect(screen.getByText(/1 room in Bangalore/i)).toBeInTheDocument();
     });
   });
 });

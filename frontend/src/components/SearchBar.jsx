@@ -52,7 +52,8 @@ export default function SearchBar({ onSearch, compact = false }) {
 
   const handleLocationSelect = (selection) => {
     if (selection.type === 'nearby') {
-      setWhere('Nearby');
+      const label = selection.label || 'Nearby';
+      setWhere(label);
       setLocationMode('nearby');
       setCoords({ lat: selection.lat, lng: selection.lng });
       syncParams(selection);
@@ -80,7 +81,7 @@ export default function SearchBar({ onSearch, compact = false }) {
     buildLocationSelection({ where, locationMode, coords, searchParams });
 
   const whereDisplay =
-    locationMode === 'nearby' ? 'Nearby' : where || 'Search destinations';
+    locationMode === 'nearby' ? (where || 'Nearby') : where || 'Search destinations';
 
   if (compact) {
     return (

@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { BookOpen, MessageCircle, Users, Video } from 'lucide-react';
 import { Icon, ICON } from '../../components/ui/Icon';
+import { HostHero, HostPage, HostPanel } from '../../components/host/HostPageLayout';
 
 const RESOURCES = [
   {
     icon: BookOpen,
     title: 'Host resource centre',
     description: 'GST billing tips, pricing guides, and best practices for Indian hotels.',
-    to: '/host/insights',
+    to: '/host?tab=analytics',
   },
   {
     icon: MessageCircle,
@@ -31,27 +32,32 @@ const RESOURCES = [
 
 export default function HostingResources() {
   return (
-    <div className="host-page">
-      <h1>Hosting resources</h1>
-      <p className="host-page__subtitle">Tools and guides built for StayEase hosts in India</p>
-      <div className="host-resources-grid">
-        {RESOURCES.map(({ icon, title, description, to, disabled }) => {
-          const className = 'host-resource-card card';
-          const inner = (
-            <>
-              <div>
-                <strong>{title}</strong>
-                <p>{description}</p>
-              </div>
-              <Icon icon={icon} size={ICON.xl} />
-            </>
-          );
-          if (disabled) {
-            return <div key={title} className={`${className} host-resource-card--disabled`}>{inner}</div>;
-          }
-          return <Link key={title} to={to} className={className}>{inner}</Link>;
-        })}
-      </div>
-    </div>
+    <HostPage>
+      <HostHero
+        title="Hosting resources"
+        subtitle="Tools and guides built for StayEase hosts in India"
+        pills={['Guides', 'Community', 'Webinars']}
+      />
+
+      <HostPanel title="Explore resources">
+        <div className="host-ui-resource-grid">
+          {RESOURCES.map(({ icon, title, description, to, disabled }) => {
+            const inner = (
+              <>
+                <div>
+                  <strong>{title}</strong>
+                  <p>{description}</p>
+                </div>
+                <Icon icon={icon} size={ICON.xl} />
+              </>
+            );
+            if (disabled) {
+              return <div key={title} className="host-ui-resource-card host-ui-resource-card--disabled">{inner}</div>;
+            }
+            return <Link key={title} to={to} className="host-ui-resource-card">{inner}</Link>;
+          })}
+        </div>
+      </HostPanel>
+    </HostPage>
   );
 }

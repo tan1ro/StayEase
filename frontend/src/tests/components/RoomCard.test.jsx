@@ -61,8 +61,10 @@ describe('RoomCard', () => {
   });
 
   it('renders hill_view badge correctly', () => {
-    render(<MemoryRouter><RoomCard room={mockRoom} /></MemoryRouter>);
-    expect(screen.getByTestId('room-card')).toBeInTheDocument();
+    render(<MemoryRouter><RoomCard room={{ ...mockRoom, facing_side: 'east' }} /></MemoryRouter>);
+    expect(screen.getByTestId('room-view-chips')).toBeInTheDocument();
+    expect(screen.getByText('Mountain view')).toBeInTheDocument();
+    expect(screen.getByText('Sunrise')).toBeInTheDocument();
   });
 
   it('renders beach_view badge correctly', () => {
@@ -82,17 +84,46 @@ describe('RoomCard', () => {
 
   it('heart icon toggles on click', () => {
     render(<MemoryRouter><RoomCard room={mockRoom} /></MemoryRouter>);
-    fireEvent.click(screen.getByLabelText('Toggle wishlist'));
-    expect(screen.getByLabelText('Toggle wishlist')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Save to wishlist'));
+    expect(screen.getByLabelText('Save to wishlist')).toBeInTheDocument();
   });
 
   it('shows tourist favourite badge for highly rated rooms', () => {
     render(
       <MemoryRouter>
-        <RoomCard room={{ ...mockRoom, avg_rating: 4.9, total_reviews: 20 }} />
+        <RoomCard
+          room={{ ...mockRoom, avg_rating: 4.9, total_reviews: 20 }}
+          tags={[{ key: 'guest_favourite', label: 'Guest favourite', className: 'room-card__tag--guest-favourite', testId: 'tourist-favourite' }]}
+        />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('tourist-favourite')).toHaveTextContent('Tourist favourite');
+    expect(screen.getByTestId('tourist-favourite')).toHaveTextContent('Guest favourite');
+  });
+
+  it('renders compare checkbox with aligned label', () => {
+    render(
+      <MemoryRouter>
+        <RoomCard room={mockRoom} compareMode compareSelected={false} onCompareToggle={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText(/Compare Cozy Hill View Room/i)).toBeInTheDocument();
+    expect(screen.getByText('Compare')).toHaveClass('room-card__compare-label');
+  });
+
+  it('renders marketing tags when provided', () => {
+    render(
+      <MemoryRouter>
+        <RoomCard
+          room={mockRoom}
+          tags={[
+            { key: 'best_rated', label: 'Best rated', className: 'room-card__tag--best-rated' },
+            { key: 'mountain_view', label: 'Mountain view', className: 'room-card__tag--mountain' },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Best rated')).toBeInTheDocument();
+    expect(screen.getAllByText('Mountain view').length).toBeGreaterThanOrEqual(1);
   });
 
   it('clicking card navigates to room detail', () => {

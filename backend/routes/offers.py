@@ -4,11 +4,10 @@ from datetime import date
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
-from database import get_database
+from database import database
 from models.common import serialize_doc, utc_now
 from models.offer import OfferCreate
 from services.auth import require_role
@@ -17,12 +16,8 @@ router = APIRouter(prefix="/api/offers", tags=["offers"])
 
 
 @router.post("", status_code=201)
-async def create_offer(
-    payload: OfferCreate,
-    user: dict = Depends(require_role("host", "admin")),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
-    offers = db["offers"]
+async def create_offer(payload: OfferCreate, user: dict = Depends(require_role("host", "admin"))):
+    offers = database.collection("offers")
     existing = await offers.find_one({"code": payload.code.upper()})
     if existing:
         raise HTTPException(status_code=422, detail={"code": "Offer code already exists"})
@@ -50,45 +45,36 @@ async def create_offer(
 
 
 @router.get("")
-async def list_offers(host_id: str | None = None, db: AsyncIOMotorDatabase = Depends(get_database)):
+async def list_offers(host_id: str | None = None):
     q = {}
     if host_id:
         q["host_id"] = host_id
-    items = await db["offers"].find(q).sort("created_at", -1).to_list(200)
+    items = await database.collection("offers").find(q).sort("created_at", -1).to_list(200)
     return [serialize_doc(i) for i in items]
 
 
 @router.get("/{code}")
-async def get_offer_by_code(code: str, db: AsyncIOMotorDatabase = Depends(get_database)):
-    offer = await db["offers"].find_one({"code": code.upper()})
+async def get_offer_by_code(code: str):
+    offer = await database.collection("offers").find_one({"code": code.upper()})
     if not offer:
         raise HTTPException(status_code=404, detail="Offer not found")
     return serialize_doc(offer)
 
 
 @router.patch("/{id}")
-async def update_offer(
-    id: str,
-    payload: dict,
-    user: dict = Depends(require_role("host", "admin")),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def update_offer(id: str, payload: dict, user: dict = Depends(require_role("host", "admin"))):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Offer not found")
-    await db["offers"].update_one({"_id": ObjectId(id)}, {"$set": payload})
-    updated = await db["offers"].find_one({"_id": ObjectId(id)})
+    await database.collection("offers").update_one({"_id": ObjectId(id)}, {"$set": payload})
+    updated = await database.collection("offers").find_one({"_id": ObjectId(id)})
     return serialize_doc(updated)
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_offer(
-    id: str,
-    user: dict = Depends(require_role("host", "admin")),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def delete_offer(id: str, user: dict = Depends(require_role("host", "admin"))):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Offer not found")
-    await db["offers"].delete_one({"_id": ObjectId(id)})
+    await database.collection("offers").delete_one({"_id": ObjectId(id)})
     return None
 
 
@@ -99,8 +85,8 @@ class ValidateOfferRequest(BaseModel):
 
 
 @router.post("/validate")
-async def validate_offer(payload: ValidateOfferRequest, db: AsyncIOMotorDatabase = Depends(get_database)):
-    offer = await db["offers"].find_one({"code": payload.code.upper(), "is_active": True})
+async def validate_offer(payload: ValidateOfferRequest):
+    offer = await database.collection("offers").find_one({"code": payload.code.upper(), "is_active": True})
     if not offer:
         raise HTTPException(status_code=422, detail={"code": "Invalid offer code"})
     today = date.today().isoformat()

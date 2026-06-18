@@ -85,7 +85,7 @@ export default function FindMyRoom() {
             <select className="select" value={prefs.view_type} onChange={(e) => setPrefs({ ...prefs, view_type: e.target.value })}>
               <option value="">Any</option>
               <option value="hill_view">Hill View</option>
-              <option value="beach_view">Beach View</option>
+              <option value="beach_view">Beach & Sea View</option>
               <option value="city_view">City View</option>
             </select>
           </div>

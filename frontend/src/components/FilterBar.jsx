@@ -4,6 +4,7 @@ import {
   ArrowUpDown,
   Beef,
   Building,
+  ChevronDown,
   Cigarette,
   CigaretteOff,
   DoorOpen,
@@ -21,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { ROOM_CATEGORIES } from '../constants/roomCategories';
+import { BEACH_SEA_VIEW_TYPES, isViewFilterActive, toggleViewFilter } from '../constants/roomPlacement';
 import { Icon, ICON } from './ui/Icon';
 
 const CATEGORIES = ROOM_CATEGORIES;
@@ -33,9 +35,8 @@ const FOOD_OPTIONS = [
 
 const VIEW_OPTIONS = [
   { value: 'hill_view', icon: Mountain, label: 'Hill View' },
-  { value: 'beach_view', icon: Waves, label: 'Beach View' },
+  { value: 'beach_view', icon: Waves, label: 'Beach & Sea View', matchValues: BEACH_SEA_VIEW_TYPES },
   { value: 'garden_view', icon: TreePine, label: 'Garden View' },
-  { value: 'sea_view', icon: Waves, label: 'Sea View' },
   { value: 'city_view', icon: Building, label: 'City View' },
   { value: 'pool_view', icon: Droplets, label: 'Pool View' },
 ];
@@ -144,21 +145,53 @@ export default function FilterBar({ onChange, defaultExpanded = false }) {
     onChange?.({});
   };
 
+  const activeType = filters.type.length === 1 ? filters.type[0] : '';
+
+  const selectCategory = useCallback(
+    (value) => {
+      updateFilters({ type: activeType === value ? [] : [value] });
+    },
+    [activeType, updateFilters],
+  );
+
+  const sortLabel = SORT_OPTIONS.find((opt) => opt.value === filters.sort)?.label || 'Recommended';
+
   return (
     <div className="filter-shell">
       {/* Toolbar */}
       <div className="filter-toolbar">
         <button
           type="button"
-          className={`filter-toolbar__btn ${showPanel ? 'filter-toolbar__btn--active' : ''}`}
+          className={`filter-toolbar__btn filter-toolbar__side ${showPanel ? 'filter-toolbar__btn--active' : ''}`}
           onClick={() => setShowPanel((v) => !v)}
         >
           <Icon icon={SlidersHorizontal} size={ICON.sm} />
           Filters
           {activeCount > 0 && <span className="filter-toolbar__badge">{activeCount}</span>}
         </button>
-        <div className="filter-toolbar__sort">
+
+        <nav className="filter-toolbar__categories" aria-label="Filter by room category">
+          {CATEGORIES.map(({ value, icon: CategoryIcon, label }) => {
+            const isActive = activeType === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                className={`category-strip__item ${isActive ? 'category-strip__item--active' : ''}`}
+                onClick={() => selectCategory(value)}
+                aria-pressed={isActive}
+                data-testid={`category-${value}`}
+              >
+                <Icon icon={CategoryIcon} size={ICON.md} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="filter-toolbar__sort filter-toolbar__side">
           <Icon icon={ArrowUpDown} size={ICON.sm} />
+          <span className="filter-toolbar__sort-label">{sortLabel}</span>
           <select
             className="filter-toolbar__select"
             value={filters.sort}
@@ -171,9 +204,11 @@ export default function FilterBar({ onChange, defaultExpanded = false }) {
               </option>
             ))}
           </select>
+          <Icon icon={ChevronDown} size={ICON.sm} className="filter-toolbar__sort-chevron" />
         </div>
+
         {activeCount > 0 && (
-          <button type="button" className="filter-toolbar__clear" onClick={clearAll} data-testid="clear-filters">
+          <button type="button" className="filter-toolbar__clear hide-mobile" onClick={clearAll} data-testid="clear-filters">
             Clear all
           </button>
         )}
@@ -189,157 +224,165 @@ export default function FilterBar({ onChange, defaultExpanded = false }) {
             </button>
           </div>
           <div className="filter-panel__grid">
-            <div className="filter-group">
-              <span className="filter-group__label">Room Category</span>
-              <div className="filter-group__pills">
-                {CATEGORIES.map(({ value, icon: PillIcon, label }) => (
+            <div className="filter-panel__row filter-panel__row--quad">
+              <div className="filter-group">
+                <span className="filter-group__label">Room Category</span>
+                <div className="filter-group__pills filter-group__pills--grid-2">
+                  {CATEGORIES.map(({ value, icon: PillIcon, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`pill ${filters.type.includes(value) ? 'pill--active' : ''}`}
+                      onClick={() => updateFilters({ type: toggleInList(filters.type, value) })}
+                    >
+                      <Icon icon={PillIcon} size={ICON.sm} /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-group__label">Food Preference</span>
+                <div className="filter-group__pills filter-group__pills--grid-2">
+                  {FOOD_OPTIONS.map(({ value, icon: PillIcon, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`pill ${filters.food.includes(value) ? 'pill--active' : ''}`}
+                      onClick={() => updateFilters({ food: toggleInList(filters.food, value) })}
+                      data-testid={`filter-food-${value}`}
+                    >
+                      <Icon icon={PillIcon} size={ICON.sm} /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-group__label">Smoking</span>
+                <div className="filter-group__pills filter-group__pills--grid-2">
+                  {[
+                    { value: '', label: 'Any' },
+                    { value: 'smoking', icon: Cigarette, label: 'Smoking' },
+                    { value: 'non_smoking', icon: CigaretteOff, label: 'Non-Smoking' },
+                  ].map(({ value, icon: PillIcon, label }) => (
+                    <button
+                      key={value || 'any'}
+                      type="button"
+                      className={`pill ${filters.smoking === value ? 'pill--active' : ''}`}
+                      onClick={() => updateFilters({ smoking: value })}
+                      data-testid={`filter-smoking-${value || 'any'}`}
+                    >
+                      {PillIcon ? <Icon icon={PillIcon} size={ICON.sm} /> : null} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-group__label">Alcohol</span>
+                <div className="filter-group__pills filter-group__pills--grid-2">
+                  {[
+                    { value: '', label: 'Any' },
+                    { value: 'alcohol', icon: Wine, label: 'Alcohol' },
+                    { value: 'non_alcohol', icon: WineOff, label: 'No Alcohol' },
+                  ].map(({ value, icon: PillIcon, label }) => (
+                    <button
+                      key={value || 'any'}
+                      type="button"
+                      className={`pill ${filters.alcohol === value ? 'pill--active' : ''}`}
+                      onClick={() => updateFilters({ alcohol: value })}
+                      data-testid={`filter-alcohol-${value || 'any'}`}
+                    >
+                      {PillIcon ? <Icon icon={PillIcon} size={ICON.sm} /> : null} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="filter-panel__row filter-panel__row--full">
+              <div className="filter-group filter-group--full">
+                <span className="filter-group__label">View Type</span>
+                <div className="filter-group__pills filter-group__pills--grid-5">
+                  {VIEW_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`pill ${isViewFilterActive(filters.view, option) ? 'pill--active' : ''}`}
+                      onClick={() => updateFilters({ view: toggleViewFilter(filters.view, option) })}
+                      data-testid={`filter-view-${option.value}`}
+                    >
+                      <Icon icon={option.icon} size={ICON.sm} /> {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="filter-panel__row filter-panel__row--quad">
+              <div className="filter-group">
+                <span className="filter-group__label">Balcony</span>
+                <div className="filter-group__pills filter-group__pills--grid-2">
                   <button
-                    key={value}
                     type="button"
-                    className={`pill ${filters.type.includes(value) ? 'pill--active' : ''}`}
-                    onClick={() => updateFilters({ type: toggleInList(filters.type, value) })}
+                    className={`pill ${!filters.balcony ? 'pill--active' : ''}`}
+                    onClick={() => updateFilters({ balcony: false })}
+                    data-testid="filter-balcony-any"
                   >
-                    <Icon icon={PillIcon} size={ICON.sm} /> {label}
+                    Any
                   </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Food Preference</span>
-              <div className="filter-group__pills">
-                {FOOD_OPTIONS.map(({ value, icon: PillIcon, label }) => (
                   <button
-                    key={value}
                     type="button"
-                    className={`pill ${filters.food.includes(value) ? 'pill--active' : ''}`}
-                    onClick={() => updateFilters({ food: toggleInList(filters.food, value) })}
-                    data-testid={`filter-food-${value}`}
+                    className={`pill ${filters.balcony ? 'pill--active' : ''}`}
+                    onClick={() => updateFilters({ balcony: true })}
+                    data-testid="filter-balcony-true"
                   >
-                    <Icon icon={PillIcon} size={ICON.sm} /> {label}
+                    <Icon icon={DoorOpen} size={ICON.sm} /> With Balcony
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
 
-            <div className="filter-group">
-              <span className="filter-group__label">Smoking</span>
-              <div className="filter-group__pills">
-                {[
-                  { value: '', label: 'Any' },
-                  { value: 'smoking', icon: Cigarette, label: 'Smoking' },
-                  { value: 'non_smoking', icon: CigaretteOff, label: 'Non-Smoking' },
-                ].map(({ value, icon: PillIcon, label }) => (
+              <div className="filter-group">
+                <span className="filter-group__label">Guests</span>
+                <div className="filter-group__pills filter-group__pills--stepper">
+                  <button type="button" className="pill" onClick={() => updateFilters({ guests: String(Math.max(1, Number(filters.guests) - 1)) })} aria-label="Decrease guests">
+                    <Icon icon={Minus} size={ICON.sm} />
+                  </button>
+                  <span className="pill pill--active">{filters.guests}</span>
+                  <button type="button" className="pill" onClick={() => updateFilters({ guests: String(Math.min(10, Number(filters.guests) + 1)) })} aria-label="Increase guests">
+                    <Icon icon={Plus} size={ICON.sm} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-group__label">Price up to ₹{Number(filters.max_price).toLocaleString('en-IN')}</span>
+                <div className="filter-group__control">
+                  <input
+                    type="range"
+                    min="0"
+                    max="50000"
+                    step="500"
+                    value={filters.max_price}
+                    onChange={(e) => updateFilters({ max_price: e.target.value })}
+                    aria-label="Max price"
+                    className="filter-range"
+                  />
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-group__label">Availability</span>
+                <div className="filter-group__pills filter-group__pills--single">
                   <button
-                    key={value || 'any'}
                     type="button"
-                    className={`pill ${filters.smoking === value ? 'pill--active' : ''}`}
-                    onClick={() => updateFilters({ smoking: value })}
-                    data-testid={`filter-smoking-${value || 'any'}`}
+                    className={`pill ${filters.available ? 'pill--active' : ''}`}
+                    onClick={() => updateFilters({ available: !filters.available })}
                   >
-                    {PillIcon ? <Icon icon={PillIcon} size={ICON.sm} /> : null} {label}
+                    Available only
                   </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Alcohol</span>
-              <div className="filter-group__pills">
-                {[
-                  { value: '', label: 'Any' },
-                  { value: 'alcohol', icon: Wine, label: 'Alcohol' },
-                  { value: 'non_alcohol', icon: WineOff, label: 'No Alcohol' },
-                ].map(({ value, icon: PillIcon, label }) => (
-                  <button
-                    key={value || 'any'}
-                    type="button"
-                    className={`pill ${filters.alcohol === value ? 'pill--active' : ''}`}
-                    onClick={() => updateFilters({ alcohol: value })}
-                    data-testid={`filter-alcohol-${value || 'any'}`}
-                  >
-                    {PillIcon ? <Icon icon={PillIcon} size={ICON.sm} /> : null} {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group filter-group--full">
-              <span className="filter-group__label">View Type</span>
-              <div className="filter-group__pills">
-                {VIEW_OPTIONS.map(({ value, icon: PillIcon, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`pill ${filters.view.includes(value) ? 'pill--active' : ''}`}
-                    onClick={() => updateFilters({ view: toggleInList(filters.view, value) })}
-                    data-testid={`filter-view-${value}`}
-                  >
-                    <Icon icon={PillIcon} size={ICON.sm} /> {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Balcony</span>
-              <div className="filter-group__pills">
-                <button
-                  type="button"
-                  className={`pill ${!filters.balcony ? 'pill--active' : ''}`}
-                  onClick={() => updateFilters({ balcony: false })}
-                  data-testid="filter-balcony-any"
-                >
-                  Any
-                </button>
-                <button
-                  type="button"
-                  className={`pill ${filters.balcony ? 'pill--active' : ''}`}
-                  onClick={() => updateFilters({ balcony: true })}
-                  data-testid="filter-balcony-true"
-                >
-                  <Icon icon={DoorOpen} size={ICON.sm} /> With Balcony
-                </button>
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Guests</span>
-              <div className="filter-group__pills">
-                <button type="button" className="pill" onClick={() => updateFilters({ guests: String(Math.max(1, Number(filters.guests) - 1)) })} aria-label="Decrease guests">
-                  <Icon icon={Minus} size={ICON.sm} />
-                </button>
-                <span className="pill pill--active">{filters.guests}</span>
-                <button type="button" className="pill" onClick={() => updateFilters({ guests: String(Math.min(10, Number(filters.guests) + 1)) })} aria-label="Increase guests">
-                  <Icon icon={Plus} size={ICON.sm} />
-                </button>
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Price up to ₹{Number(filters.max_price).toLocaleString('en-IN')}</span>
-              <input
-                type="range"
-                min="0"
-                max="50000"
-                step="500"
-                value={filters.max_price}
-                onChange={(e) => updateFilters({ max_price: e.target.value })}
-                aria-label="Max price"
-                className="filter-range"
-              />
-            </div>
-
-            <div className="filter-group">
-              <span className="filter-group__label">Availability</span>
-              <div className="filter-group__pills">
-                <button
-                  type="button"
-                  className={`pill ${filters.available ? 'pill--active' : ''}`}
-                  onClick={() => updateFilters({ available: !filters.available })}
-                >
-                  Available only
-                </button>
+                </div>
               </div>
             </div>
           </div>

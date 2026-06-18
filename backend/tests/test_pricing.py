@@ -96,6 +96,32 @@ def test_platform_fees_applied():
     assert "StayEase service fee" in fee_labels
 
 
+def test_beach_view_and_sunset_premiums():
+    result = calculate_dynamic_pricing(
+        base_price=1800.0,
+        check_in=date(2025, 7, 1),
+        check_out=date(2025, 7, 3),
+        view_type="beach_view",
+        facing_side="west",
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Beach view premium" in labels
+    assert "Sunset side premium" in labels
+
+
+def test_mountain_view_and_sunrise_premiums():
+    result = calculate_dynamic_pricing(
+        base_price=850.0,
+        check_in=date(2025, 7, 1),
+        check_out=date(2025, 7, 3),
+        view_type="hill_view",
+        facing_side="east",
+    )
+    labels = [i["label"] for i in result["price_breakdown"]]
+    assert "Mountain view premium" in labels
+    assert "Sunrise side premium" in labels
+
+
 async def test_expired_offer_rejected(client, seed_data, mock_db):
     await mock_db["offers"].insert_one(
         {

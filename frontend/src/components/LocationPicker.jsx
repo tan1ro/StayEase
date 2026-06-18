@@ -47,7 +47,7 @@ export default function LocationPicker({
   const [geoError, setGeoError] = useState('');
 
   useEffect(() => {
-    if (mode === 'nearby') setQuery('Nearby');
+    if (mode === 'nearby') setQuery(value || 'Nearby');
     else setQuery(value);
   }, [value, mode]);
 
@@ -105,6 +105,18 @@ export default function LocationPicker({
     onSelect?.({ type: 'city', city: loc.value, label: loc.label });
   };
 
+  const selectNearPlace = (loc) => {
+    if (loc.lat == null || loc.lng == null) {
+      selectCity(loc);
+      return;
+    }
+    const label = `Near ${loc.value}`;
+    setQuery(label);
+    setOpen(false);
+    setGeoError('');
+    onSelect?.({ type: 'nearby', lat: loc.lat, lng: loc.lng, label, place: loc.value });
+  };
+
   const handleNearby = async () => {
     setLocating(true);
     setGeoError('');
@@ -120,7 +132,7 @@ export default function LocationPicker({
     }
   };
 
-  const displayValue = mode === 'nearby' && !open && variant !== 'modal' ? 'Nearby' : query;
+  const displayValue = mode === 'nearby' && !open && variant !== 'modal' ? (value || 'Nearby') : query;
 
   const listContent = (
     <>
@@ -145,18 +157,29 @@ export default function LocationPicker({
           <p className="location-dropdown__empty">No destinations match your search</p>
         ) : (
           filtered.map((loc) => (
-            <button
-              key={loc.value}
-              type="button"
-              className="location-dropdown__item"
-              onClick={() => selectCity(loc)}
-            >
-              <DestinationIcon type={loc.icon} />
-              <span className="location-dropdown__text">
-                <strong>{loc.label}</strong>
-                <span>{loc.subtitle}</span>
-              </span>
-            </button>
+            <div key={loc.value} className="location-dropdown__row">
+              <button
+                type="button"
+                className="location-dropdown__item"
+                onClick={() => selectCity(loc)}
+              >
+                <DestinationIcon type={loc.icon} />
+                <span className="location-dropdown__text">
+                  <strong>{loc.label}</strong>
+                  <span>{loc.subtitle}</span>
+                </span>
+              </button>
+              {loc.lat != null && loc.lng != null && (
+                <button
+                  type="button"
+                  className="location-dropdown__near-btn"
+                  onClick={() => selectNearPlace(loc)}
+                  aria-label={`Near ${loc.value}`}
+                >
+                  Near
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>

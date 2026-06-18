@@ -1,237 +1,197 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AmenityPicker from '../../components/AmenityPicker';
 import ErrorMessage from '../../components/ErrorMessage';
-import Spinner from '../../components/Spinner';
+import ImageUploader from '../../components/ImageUploader';
+import { ROOM_CATEGORIES } from '../../constants/roomCategories';
 import { roomsApi } from '../../api/api';
 
-const CATEGORIES = ['Single', 'Double', 'Triple', 'Suite', 'Villa'];
-const VIEW_TYPES = [
-  { value: 'city_view', label: 'City view' },
-  { value: 'garden_view', label: 'Garden view' },
-  { value: 'sea_view', label: 'Sea view' },
-  { value: 'hill_view', label: 'Hill view' },
-  { value: 'no_view', label: 'No view' },
-];
+const VIEWS = ['none', 'hill_view', 'beach_view', 'garden_view', 'city_view', 'pool_view'];
 
-const DEFAULT_POLICIES = {
-  check_in_time: '14:00',
-  check_out_time: '11:00',
-  cancellation: 'moderate',
-  pet_allowed: false,
-  smoking_allowed: false,
-  alcohol_allowed: false,
-};
-
-function bedConfigForCategory(category) {
-  if (category === 'Single') return 'single_bed';
-  if (category === 'Double') return 'double_bed';
-  if (category === 'Triple') return 'twin_beds';
-  if (category === 'Suite') return 'king';
-  return 'queen';
-}
-
-function viewFromApi(viewType) {
-  if (!viewType || viewType === 'none') return 'no_view';
-  return viewType;
-}
-
-function viewToApi(viewType) {
-  return viewType === 'no_view' ? 'none' : viewType;
-}
-
-const emptyForm = {
+export const defaultForm = {
   title: '',
   room_number: '',
-  room_category: 'Double',
   description: '',
-  max_guests: 2,
+  room_category: 'Double',
   price_per_night: 2000,
-  address: '',
-  city: '',
-  area: '',
-  pincode: '',
-  latitude: 12.97,
-  longitude: 77.59,
-  amenities: [],
+  max_guests: 2,
   food_preference: 'veg',
   smoking_policy: 'non_smoking',
   alcohol_policy: 'non_alcohol',
-  view_type: 'city_view',
+  view_type: 'none',
   has_balcony: false,
+  amenities: [],
+  location: {
+    address: '',
+    city: '',
+    area: '',
+    pincode: '',
+    lat: 12.97,
+    lng: 77.59,
+  },
+  policies: {
+    check_in_time: '14:00',
+    check_out_time: '11:00',
+    cancellation: 'moderate',
+    pet_allowed: false,
+    smoking_allowed: false,
+    alcohol_allowed: false,
+  },
+  is_available: false,
 };
 
-function validateForm(form) {
-  const errors = {};
-  if (!form.title.trim()) errors.title = 'Title is required';
-  if (!form.room_number.trim()) errors.room_number = 'Room number is required';
-  if (!form.description.trim()) errors.description = 'Description is required';
-  if (!form.city.trim()) errors.city = 'City is required';
-  if (!form.area.trim()) errors.area = 'Area is required';
-  if (!form.address.trim()) errors.address = 'Address is required';
-  if (!form.price_per_night || form.price_per_night <= 0) errors.price_per_night = 'Price must be greater than 0';
-  if (!form.max_guests || form.max_guests < 1) errors.max_guests = 'Max guests is required';
-  return errors;
+function bedConfigFromCount(count) {
+  if (count <= 1) return 'single_bed';
+  if (count === 2) return 'twin_beds';
+  return 'king';
 }
 
-function buildPayload(form, isAvailable) {
+export function toApiPayload(form, { isAvailable = false } = {}) {
+  const title = form.title.trim().length >= 5 ? form.title.trim() : 'New StayEase listing';
   const description = form.description.trim().length >= 50
     ? form.description.trim()
-    : `${form.description.trim()} Comfortable stay with thoughtful amenities and a welcoming host experience in India.`;
+    : 'A comfortable stay at our property with great amenities, a welcoming host, and everything you need for a relaxing trip.';
+  const roomNumber = form.room_number.trim() || `R-${Date.now().toString().slice(-6)}`;
 
   return {
-    room_number: form.room_number.trim(),
-    title: form.title.trim(),
+    room_number: roomNumber,
+    title,
     description,
     room_category: form.room_category,
-    bed_configuration: bedConfigForCategory(form.room_category),
-    price_per_night: Number(form.price_per_night),
-    max_guests: Number(form.max_guests),
+    bed_configuration: bedConfigFromCount(form.bed_count || 1),
+    price_per_night: form.price_per_night,
+    max_guests: Math.min(form.max_guests, 10),
     amenities: form.amenities,
-    location: {
-      address: form.address.trim(),
-      city: form.city.trim(),
-      area: form.area.trim(),
-      pincode: form.pincode.trim() || undefined,
-      lat: Number(form.latitude),
-      lng: Number(form.longitude),
-    },
+    location: form.location,
     food_preference: form.food_preference,
     smoking_policy: form.smoking_policy,
     alcohol_policy: form.alcohol_policy,
-    view_type: viewToApi(form.view_type),
+    view_type: form.view_type,
     has_balcony: form.has_balcony,
-    facing_side: 'none',
-    policies: DEFAULT_POLICIES,
+    policies: form.policies,
     is_available: isAvailable,
   };
 }
 
-function roomToForm(room) {
-  const loc = room.location || {};
-  return {
-    title: room.title || '',
-    room_number: room.room_number || '',
-    room_category: room.room_category || 'Double',
-    description: room.description || '',
-    max_guests: room.max_guests ?? 2,
-    price_per_night: room.price_per_night ?? 2000,
-    address: loc.address || '',
-    city: loc.city || '',
-    area: loc.area || '',
-    pincode: loc.pincode || '',
-    latitude: loc.lat ?? 12.97,
-    longitude: loc.lng ?? 77.59,
-    amenities: room.amenities || [],
-    food_preference: room.food_preference || 'veg',
-    smoking_policy: room.smoking_policy || 'non_smoking',
-    alcohol_policy: room.alcohol_policy || 'non_alcohol',
-    view_type: viewFromApi(room.view_type),
-    has_balcony: Boolean(room.has_balcony),
-  };
-}
-
-export default function RoomForm() {
-  const { id } = useParams();
+export default function RoomForm({ initial = defaultForm, roomId, isEdit }) {
   const navigate = useNavigate();
-  const isEdit = Boolean(id);
-
-  const [form, setForm] = useState(emptyForm);
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [form, setForm] = useState({
+    ...defaultForm,
+    ...initial,
+    location: { ...defaultForm.location, ...(initial.location || {}) },
+    policies: { ...defaultForm.policies, ...(initial.policies || {}) },
+    amenities: initial.amenities || [],
+  });
+  const [photos, setPhotos] = useState(initial.photos || []);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(isEdit);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
+  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  const setLoc = (key, val) => setForm((f) => ({ ...f, location: { ...f.location, [key]: val } }));
+  const setPol = (key, val) => setForm((f) => ({ ...f, policies: { ...f.policies, [key]: val } }));
+
+  const save = async (publish) => {
     setLoading(true);
     setError('');
-    roomsApi.get(id)
-      .then(({ data }) => setForm(roomToForm(data)))
-      .catch((err) => setError(err.normalized?.message || 'Failed to load room'))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  const set = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setFieldErrors((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  };
-
-  const submit = async (publish) => {
-    setError('');
     setSuccess('');
-    const errors = validateForm(form);
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      return;
-    }
-
-    setSaving(true);
     try {
-      const payload = buildPayload(form, publish);
+      const payload = toApiPayload(form, { isAvailable: publish });
       if (isEdit) {
-        await roomsApi.update(id, payload);
+        await roomsApi.update(roomId, payload);
       } else {
         await roomsApi.create(payload);
       }
-      setSuccess(publish ? 'Room published successfully.' : 'Draft saved successfully.');
-      setTimeout(() => navigate('/host/rooms'), 1500);
+      setSuccess(publish ? 'Listing published successfully.' : 'Draft saved successfully.');
+      setTimeout(() => navigate('/host/rooms'), 1200);
     } catch (err) {
-      setError(err.normalized?.message || 'Failed to save room');
+      setError(err.normalized?.message || 'Save failed');
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  if (loading) return <Spinner label="Loading room..." />;
+  const handlePhotoUpload = async (file) => {
+    if (!roomId) return;
+    setUploading(true);
+    try {
+      const { data } = await roomsApi.uploadPhoto(roomId, file);
+      setPhotos((prev) => {
+        const next = [...(prev || []), data].filter((p) => p && p.url);
+        const hasPrimary = next.some((p) => p.is_primary);
+        if (!hasPrimary && next.length) next[0] = { ...next[0], is_primary: true };
+        return next;
+      });
+    } catch (err) {
+      setError(err.normalized?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleReorderPhotos = async (next) => {
+    setPhotos(next);
+    try {
+      await roomsApi.reorderPhotos(roomId, next.map((p) => p.public_id).filter(Boolean));
+    } catch {
+      // keep local order on failure
+    }
+  };
+
+  const handleDeletePhoto = async (photo) => {
+    const pid = photo?.public_id;
+    if (!pid) {
+      setPhotos((prev) => (prev || []).filter((p) => p !== photo));
+      return;
+    }
+    try {
+      await roomsApi.deletePhoto(roomId, pid);
+      setPhotos((prev) => (prev || []).filter((p) => p?.public_id !== pid));
+    } catch (err) {
+      throw new Error(err.normalized?.message || 'Could not delete photo');
+    }
+  };
 
   return (
     <form onSubmit={(e) => e.preventDefault()}>
       <ErrorMessage message={error} />
       {success && (
-        <p className="write-review-success">{success}</p>
+        <p className="form-success" role="status" style={{ color: 'var(--success)', marginBottom: '1rem' }}>
+          {success}
+        </p>
       )}
 
       <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-        <h2>Basic info</h2>
+        <h2>Basic Info</h2>
         <div className="form-row">
           <div className="form-group">
             <label className="label">Title</label>
-            <input className="input" value={form.title} onChange={(e) => set('title', e.target.value)} />
-            {fieldErrors.title && <span className="text-danger">{fieldErrors.title}</span>}
+            <input className="input" value={form.title} onChange={(e) => set('title', e.target.value)} required />
           </div>
           <div className="form-group">
-            <label className="label">Room number</label>
-            <input className="input" value={form.room_number} onChange={(e) => set('room_number', e.target.value)} />
-            {fieldErrors.room_number && <span className="text-danger">{fieldErrors.room_number}</span>}
+            <label className="label">Room Number</label>
+            <input className="input" value={form.room_number} onChange={(e) => set('room_number', e.target.value)} required />
           </div>
         </div>
         <div className="form-group">
-          <label className="label">Description</label>
-          <textarea className="textarea" value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} />
-          {fieldErrors.description && <span className="text-danger">{fieldErrors.description}</span>}
+          <label className="label">Description (min 50 chars)</label>
+          <textarea className="textarea" value={form.description} onChange={(e) => set('description', e.target.value)} required minLength={50} />
         </div>
         <div className="form-row">
           <div className="form-group">
             <label className="label">Category</label>
             <select className="select" value={form.room_category} onChange={(e) => set('room_category', e.target.value)}>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {ROOM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label className="label">Max guests</label>
             <input type="number" className="input" min={1} max={10} value={form.max_guests} onChange={(e) => set('max_guests', Number(e.target.value))} />
-            {fieldErrors.max_guests && <span className="text-danger">{fieldErrors.max_guests}</span>}
           </div>
           <div className="form-group">
-            <label className="label">Price per night (₹)</label>
-            <input type="number" className="input" min={100} value={form.price_per_night} onChange={(e) => set('price_per_night', Number(e.target.value))} />
-            {fieldErrors.price_per_night && <span className="text-danger">{fieldErrors.price_per_night}</span>}
+            <label className="label">Price/night (₹)</label>
+            <input type="number" className="input" min={100} value={form.price_per_night} onChange={(e) => set('price_per_night', Number(e.target.value))} required />
           </div>
         </div>
       </section>
@@ -240,45 +200,42 @@ export default function RoomForm() {
         <h2>Location</h2>
         <div className="form-group">
           <label className="label">Address</label>
-          <input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
-          {fieldErrors.address && <span className="text-danger">{fieldErrors.address}</span>}
+          <input className="input" value={form.location.address} onChange={(e) => setLoc('address', e.target.value)} />
         </div>
         <div className="form-row">
           <div className="form-group">
             <label className="label">City</label>
-            <input className="input" value={form.city} onChange={(e) => set('city', e.target.value)} />
-            {fieldErrors.city && <span className="text-danger">{fieldErrors.city}</span>}
+            <input className="input" value={form.location.city} onChange={(e) => setLoc('city', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="label">Area</label>
-            <input className="input" value={form.area} onChange={(e) => set('area', e.target.value)} />
-            {fieldErrors.area && <span className="text-danger">{fieldErrors.area}</span>}
+            <input className="input" value={form.location.area} onChange={(e) => setLoc('area', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="label">Pincode</label>
-            <input className="input" value={form.pincode} onChange={(e) => set('pincode', e.target.value)} inputMode="numeric" />
+            <input className="input" value={form.location.pincode || ''} onChange={(e) => setLoc('pincode', e.target.value)} inputMode="numeric" />
           </div>
         </div>
         <div className="form-row">
           <div className="form-group">
             <label className="label">Latitude</label>
-            <input type="number" step="any" className="input" value={form.latitude} onChange={(e) => set('latitude', Number(e.target.value))} />
+            <input type="number" step="any" className="input" value={form.location.lat} onChange={(e) => setLoc('lat', Number(e.target.value))} />
           </div>
           <div className="form-group">
             <label className="label">Longitude</label>
-            <input type="number" step="any" className="input" value={form.longitude} onChange={(e) => set('longitude', Number(e.target.value))} />
+            <input type="number" step="any" className="input" value={form.location.lng} onChange={(e) => setLoc('lng', Number(e.target.value))} />
           </div>
         </div>
       </section>
 
       <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-        <h2>Preferences</h2>
+        <h2>Preferences &amp; policies</h2>
         <div className="form-row">
           <div className="form-group">
             <label className="label">Food preference</label>
             <select className="select" value={form.food_preference} onChange={(e) => set('food_preference', e.target.value)}>
-              <option value="veg">Vegetarian</option>
-              <option value="nonveg">Non-vegetarian</option>
+              <option value="veg">Veg</option>
+              <option value="non_veg">Non-veg</option>
               <option value="both">Both</option>
             </select>
           </div>
@@ -292,7 +249,7 @@ export default function RoomForm() {
           <div className="form-group">
             <label className="label">Alcohol policy</label>
             <select className="select" value={form.alcohol_policy} onChange={(e) => set('alcohol_policy', e.target.value)}>
-              <option value="non_alcohol">Non-alcohol</option>
+              <option value="non_alcohol">No alcohol</option>
               <option value="alcohol">Alcohol allowed</option>
             </select>
           </div>
@@ -301,32 +258,61 @@ export default function RoomForm() {
           <div className="form-group">
             <label className="label">View type</label>
             <select className="select" value={form.view_type} onChange={(e) => set('view_type', e.target.value)}>
-              {VIEW_TYPES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {VIEWS.map((v) => <option key={v} value={v}>{v.replace('_', ' ')}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label className="label">
-              <input type="checkbox" checked={form.has_balcony} onChange={(e) => set('has_balcony', e.target.checked)} />
-              {' '}Has balcony
-            </label>
+            <label className="label">Balcony</label>
+            <select className="select" value={form.has_balcony ? 'yes' : 'no'} onChange={(e) => set('has_balcony', e.target.value === 'yes')}>
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label className="label">Check-in time</label>
+            <input className="input" type="time" value={form.policies.check_in_time} onChange={(e) => setPol('check_in_time', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="label">Check-out time</label>
+            <input className="input" type="time" value={form.policies.check_out_time} onChange={(e) => setPol('check_out_time', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="label">Cancellation</label>
+            <select className="select" value={form.policies.cancellation} onChange={(e) => setPol('cancellation', e.target.value)}>
+              <option value="flexible">Flexible</option>
+              <option value="moderate">Moderate</option>
+              <option value="strict">Strict</option>
+            </select>
           </div>
         </div>
       </section>
 
       <section className="card amenity-picker-section" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
         <h2>Amenities</h2>
-        <AmenityPicker
-          selected={form.amenities}
-          onChange={(next) => set('amenities', next)}
-        />
+        <AmenityPicker selected={form.amenities} onChange={(next) => set('amenities', next)} />
       </section>
 
+      {isEdit && (
+        <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h2>Photos</h2>
+          <ImageUploader
+            photos={photos}
+            onUpload={handlePhotoUpload}
+            uploading={uploading}
+            onReorder={handleReorderPhotos}
+            onDelete={handleDeletePhoto}
+          />
+        </section>
+      )}
+
       <div style={{ display: 'flex', gap: '0.75rem' }}>
-        <button type="button" className="btn btn-outline" disabled={saving} onClick={() => submit(false)}>
-          {saving ? 'Saving…' : 'Save as Draft'}
+        <button type="button" className="btn btn-outline" onClick={() => save(false)} disabled={loading}>
+          {loading ? 'Saving…' : 'Save Draft'}
         </button>
-        <button type="button" className="btn btn-primary" disabled={saving} onClick={() => submit(true)}>
-          {saving ? 'Publishing…' : 'Publish'}
+        <button type="button" className="btn btn-primary" onClick={() => save(true)} disabled={loading}>
+          {loading ? 'Publishing…' : 'Publish'}
         </button>
       </div>
     </form>

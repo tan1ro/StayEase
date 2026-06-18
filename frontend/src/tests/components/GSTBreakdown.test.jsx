@@ -3,16 +3,16 @@ import { render, screen } from '@testing-library/react';
 import GSTBreakdown, { calculateGST } from '../../components/GSTBreakdown';
 
 describe('calculateGST', () => {
-  it('0% GST for price < 1000', () => {
+  it('5% GST for price up to 7500', () => {
     const gst = calculateGST(800, 2);
-    expect(gst.gst_rate).toBe(0);
-    expect(gst.total_gst).toBe(0);
+    expect(gst.gst_rate).toBe(0.05);
+    expect(gst.total_gst).toBe(80);
   });
 
-  it('12% GST for price 1000-7500', () => {
+  it('5% GST for price 1000-7500', () => {
     const gst = calculateGST(2000, 2);
-    expect(gst.gst_rate).toBe(0.12);
-    expect(gst.total_gst).toBe(480);
+    expect(gst.gst_rate).toBe(0.05);
+    expect(gst.total_gst).toBe(200);
   });
 
   it('18% GST for price > 7500', () => {

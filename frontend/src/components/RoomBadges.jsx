@@ -34,8 +34,8 @@ const ALCOHOL_CONFIG = {
 
 const VIEW_CONFIG = {
   hill_view: { icon: Mountain, label: 'Hill View' },
-  beach_view: { icon: Waves, label: 'Beach View' },
-  sea_view: { icon: Waves, label: 'Sea View' },
+  beach_view: { icon: Waves, label: 'Beach & Sea View' },
+  sea_view: { icon: Waves, label: 'Beach & Sea View' },
   garden_view: { icon: TreePine, label: 'Garden View' },
   city_view: { icon: Building, label: 'City View' },
   pool_view: { icon: Droplets, label: 'Pool View' },

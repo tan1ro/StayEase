@@ -35,8 +35,6 @@ jobs:
           OPEN_METEO_BASE_URL=https://api.open-meteo.com
           GST_RATE=0.18
           GST_NUMBER=TEST_GST
-          GUEST_PLATFORM_FEE_PERCENT=10.0
-          HOST_PLATFORM_FEE_PERCENT=3.0
           FRONTEND_URL=http://localhost:5173
           APP_NAME=StayEase
           APP_HOST=0.0.0.0

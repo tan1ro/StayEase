@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Star } from 'lucide-react';
 import { formatCurrency, roomId, wishlistApi } from '../api/api';
@@ -7,6 +7,7 @@ import { useOnboarding } from '../context/OnboardingContext';
 import SafeImage from './SafeImage';
 import { Icon, ICON } from './ui/Icon';
 import { getPrimaryRoomImage } from '../utils/roomImages';
+import RoomViewChips from './RoomViewChips';
 
 export default function RoomCard({
   room,
@@ -16,6 +17,7 @@ export default function RoomCard({
   compareMode = false,
   compareSelected = false,
   onCompareToggle,
+  tags = [],
 }) {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
@@ -24,9 +26,15 @@ export default function RoomCard({
   const [wishlisted, setWishlisted] = useState(user?.wishlist?.includes(id));
   const primaryPhoto = getPrimaryRoomImage(room);
 
-  const isTouristFavourite = room.avg_rating >= 4.85 && room.total_reviews >= 10;
+  useEffect(() => {
+    setWishlisted(user?.wishlist?.includes(id));
+  }, [user?.wishlist, id]);
+
   const totalPrice = Math.round(room.price_per_night * nights);
   const displayTitle = room.title || `${room.room_category} in ${room.location?.area}`;
+  const [propertyTitle, roomTypeTitle] = displayTitle.includes(' · ')
+    ? displayTitle.split(' · ', 2)
+    : [displayTitle, null];
 
   const handleHeart = async (e) => {
     e.stopPropagation();
@@ -38,17 +46,25 @@ export default function RoomCard({
       });
       return;
     }
+    const next = !wishlisted;
+    setWishlisted(next);
     try {
       const { data } = await wishlistApi.toggle(id);
-      setWishlisted(data.wishlisted ?? data.added);
+      const saved = data.wishlisted ?? data.added ?? next;
+      setWishlisted(saved);
       await refreshUser();
-      onWishlistToggle?.(id);
+      onWishlistToggle?.(id, saved);
     } catch {
-      /* handled by interceptor */
+      setWishlisted(!next);
     }
   };
 
   const handleClick = () => navigate(`/rooms/${id}`);
+
+  const handleCompareChange = (e) => {
+    e.stopPropagation();
+    onCompareToggle?.(id);
+  };
 
   return (
     <article
@@ -66,18 +82,43 @@ export default function RoomCard({
           className="room-card__image"
           fallbackSeed={id}
         />
+        {compareMode && (
+          <label
+            className={`room-card__compare${compareSelected ? ' room-card__compare--active' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              className="room-card__compare-input"
+              checked={compareSelected}
+              onChange={handleCompareChange}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Compare ${displayTitle}`}
+            />
+            <span className="room-card__compare-label">Compare</span>
+          </label>
+        )}
         <button
           type="button"
           className={`room-card__heart ${wishlisted ? 'room-card__heart--active' : ''}`}
           onClick={handleHeart}
-          aria-label="Toggle wishlist"
+          aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
+          aria-pressed={wishlisted}
         >
           <Icon icon={Heart} size={ICON.md} fill={wishlisted ? 'currentColor' : 'none'} />
         </button>
-        {isTouristFavourite && (
-          <span className="room-card__favourite" data-testid="tourist-favourite">
-            Tourist favourite
-          </span>
+        {tags.length > 0 && (
+          <div className="room-card__tags">
+            {tags.map((tag) => (
+              <span
+                key={tag.key}
+                className={`room-card__tag ${tag.className}`}
+                data-testid={tag.testId}
+              >
+                {tag.label}
+              </span>
+            ))}
+          </div>
         )}
         {matchScore != null && (
           <span className="room-card__match" data-testid="match-badge">
@@ -89,24 +130,13 @@ export default function RoomCard({
             Unavailable
           </span>
         )}
-        {compareMode && (
-          <label
-            className="room-card__compare"
-            style={{ position: 'absolute', top: 8, left: 8, background: 'var(--card-bg)', padding: '4px 8px', borderRadius: 6, fontSize: '0.75rem', zIndex: 2 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              checked={compareSelected}
-              onChange={() => onCompareToggle?.(id)}
-            />
-            {' '}Compare
-          </label>
-        )}
       </div>
       <div className="room-card__body">
         <div className="room-card__row">
-          <h3 className="room-card__title">{displayTitle}</h3>
+          <h3 className="room-card__title">
+            <span className="room-card__title-main">{propertyTitle}</span>
+            {roomTypeTitle && <span className="room-card__title-sub">{roomTypeTitle}</span>}
+          </h3>
           {room.avg_rating > 0 && (
             <span className="room-card__rating">
               <Icon icon={Star} size={ICON.sm} fill="currentColor" /> {room.avg_rating.toFixed(2)}
@@ -119,6 +149,7 @@ export default function RoomCard({
             <span className="room-card__distance"> · {room.distance_km} km away</span>
           )}
         </p>
+        <RoomViewChips room={room} showCategory />
         <p className="room-card__price">
           <strong>{formatCurrency(totalPrice)}</strong>
           <span> for {nights} nights</span>

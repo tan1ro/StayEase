@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2,
   Camera,
@@ -34,8 +34,15 @@ import { Icon, ICON } from '../../components/ui/Icon';
 import { ROOM_CATEGORIES } from '../../constants/roomCategories';
 import { buildDescriptionFromVibes } from '../../constants/stayVibes';
 import { roomsApi } from '../../api/api';
+import {
+  clearDraftProgress,
+  getDraftProgress,
+  inferWizardStepId,
+  saveDraftProgress,
+  wizardStepIndex,
+} from '../../utils/listingResume';
 
-const VIEWS = ['none', 'hill_view', 'beach_view', 'sea_view', 'garden_view', 'city_view', 'pool_view'];
+const VIEWS = ['none', 'hill_view', 'beach_view', 'garden_view', 'city_view', 'pool_view'];
 
 const PLACE_TYPES = [
   {
@@ -142,14 +149,30 @@ const WIZARD_STEPS = [
   { id: 'review', section: 2 },
 ];
 
-const DRAFT_STORAGE_KEY = 'stayease.host.addRoomDraft';
-
-function safeJsonParse(value) {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
+function roomToFormState(room, prev) {
+  return {
+    ...prev,
+    room_number: room.room_number || prev.room_number,
+    title: room.title || prev.title,
+    description: room.description || prev.description,
+    room_category: room.room_category || prev.room_category,
+    place_type: placeTypeForCategory(room.room_category || prev.room_category),
+    bed_configuration: room.bed_configuration || prev.bed_configuration,
+    price_per_night: room.price_per_night ?? prev.price_per_night,
+    max_guests: room.max_guests ?? prev.max_guests,
+    food_preference: room.food_preference || prev.food_preference,
+    smoking_policy: room.smoking_policy || prev.smoking_policy,
+    alcohol_policy: room.alcohol_policy || prev.alcohol_policy,
+    view_type: room.view_type || prev.view_type,
+    has_balcony: room.has_balcony ?? prev.has_balcony,
+    facing_side: room.facing_side || prev.facing_side,
+    floor_label: room.floor_label || prev.floor_label,
+    view_description: room.view_description || prev.view_description,
+    amenities: room.amenities || prev.amenities,
+    location: { ...prev.location, ...(room.location || {}) },
+    policies: { ...prev.policies, ...(room.policies || {}) },
+    is_available: false,
+  };
 }
 
 function bedConfigFromCount(count) {
@@ -688,14 +711,15 @@ function LocationStep({ form, setLoc, set }) {
   );
 }
 
-function ListingWizard({ initial = defaultForm }) {
+function ListingWizard({ resumeRoomId = null }) {
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState(defaultForm);
   const [roomId, setRoomId] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(Boolean(resumeRoomId));
   const [uploading, setUploading] = useState(false);
   const [published, setPublished] = useState(null);
   const [showSuperhostGuidance, setShowSuperhostGuidance] = useState(true);
@@ -706,41 +730,52 @@ function ListingWizard({ initial = defaultForm }) {
   const setLoc = (key, val) => setForm((f) => ({ ...f, location: { ...f.location, [key]: val } }));
   const setPol = (key, val) => setForm((f) => ({ ...f, policies: { ...f.policies, [key]: val } }));
 
-  // Restore wizard stage + draft room on reload.
+  // Restore in-progress listing from URL, local storage, or saved draft room.
   useEffect(() => {
-    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
-    const saved = raw ? safeJsonParse(raw) : null;
-    if (!saved?.roomId || typeof saved?.stepId !== 'string') return;
+    let cancelled = false;
 
-    const idx = WIZARD_STEPS.findIndex((s) => s.id === saved.stepId);
-    if (idx >= 0) setStepIndex(idx);
-    setRoomId(saved.roomId);
+    const restore = async () => {
+      const saved = getDraftProgress();
+      const targetRoomId = resumeRoomId || saved?.roomId;
+      if (!targetRoomId) {
+        setRestoring(false);
+        return;
+      }
 
-    roomsApi
-      .get(saved.roomId)
-      .then(({ data }) => {
+      try {
+        const { data } = await roomsApi.get(targetRoomId);
+        if (cancelled) return;
+
+        if (data.is_available) {
+          clearDraftProgress();
+          setRestoring(false);
+          return;
+        }
+
+        setRoomId(targetRoomId);
         setPhotos(data.photos || []);
-        setForm((prev) => ({
-          ...prev,
-          ...data,
-          location: { ...prev.location, ...(data.location || {}) },
-          policies: { ...prev.policies, ...(data.policies || {}) },
-          amenities: data.amenities || prev.amenities,
-          planned_offers: data.planned_offers || prev.planned_offers,
-        }));
-      })
-      .catch(() => {
-        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-      });
-  }, []);
+        setForm((prev) => roomToFormState(data, prev));
+
+        const stepId = (saved?.roomId === targetRoomId && saved?.stepId)
+          ? saved.stepId
+          : inferWizardStepId(data);
+        setStepIndex(wizardStepIndex(stepId));
+        saveDraftProgress(targetRoomId, stepId);
+      } catch {
+        if (!cancelled) clearDraftProgress();
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    };
+
+    restore();
+    return () => { cancelled = true; };
+  }, [resumeRoomId]);
 
   // Persist wizard stage as the user progresses.
   useEffect(() => {
     if (!roomId && step.id === 'intro-1') return;
-    window.localStorage.setItem(
-      DRAFT_STORAGE_KEY,
-      JSON.stringify({ roomId, stepId: step.id, updatedAt: Date.now() }),
-    );
+    saveDraftProgress(roomId, step.id);
   }, [roomId, step.id]);
 
   const sectionProgress = useMemo(() => {
@@ -782,6 +817,28 @@ function ListingWizard({ initial = defaultForm }) {
         return true;
     }
   }, [step.id, form, photos.length]);
+
+  const persistDraft = async () => {
+    const id = roomId || await ensureDraft();
+    await roomsApi.update(id, toApiPayload(form, { isAvailable: false }));
+    saveDraftProgress(id, step.id);
+    return id;
+  };
+
+  const handleSaveExit = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      if (roomId || step.id !== 'intro-1') {
+        await persistDraft();
+      }
+      navigate('/host/rooms');
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not save your progress');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const ensureDraft = async () => {
     if (roomId) return roomId;
@@ -856,6 +913,14 @@ function ListingWizard({ initial = defaultForm }) {
         const draft = buildDescriptionFromVibes(form.stay_vibes, form);
         if (draft) set('description', draft);
       }
+      if (roomId) {
+        try {
+          await roomsApi.update(roomId, toApiPayload(form, { isAvailable: false }));
+          saveDraftProgress(roomId, WIZARD_STEPS[stepIndex + 1].id);
+        } catch {
+          // Non-blocking — local step advance still works.
+        }
+      }
       setStepIndex((i) => i + 1);
       return;
     }
@@ -871,7 +936,7 @@ function ListingWizard({ initial = defaultForm }) {
         id = data._id;
       }
       setPublished({ id, title: form.title.trim() });
-      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      clearDraftProgress();
     } catch (err) {
       setError(err.normalized?.message || 'Publish failed');
     } finally {
@@ -1065,6 +1130,14 @@ function ListingWizard({ initial = defaultForm }) {
     }
   };
 
+  if (restoring) {
+    return (
+      <div className="listing-wizard" style={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>
+        <p className="listing-wizard__subtitle">Loading your listing…</p>
+      </div>
+    );
+  }
+
   return (
     <ListingWizardShell
       stepIndex={stepIndex}
@@ -1072,6 +1145,8 @@ function ListingWizard({ initial = defaultForm }) {
       sectionProgress={sectionProgress}
       onBack={() => setStepIndex((i) => Math.max(0, i - 1))}
       onNext={goNext}
+      onSaveExit={handleSaveExit}
+      saveExitLabel={loading ? 'Saving…' : 'Save & exit'}
       nextLabel={
         step.id === 'review'
           ? (loading ? 'Creating…' : 'Create listing')
@@ -1085,7 +1160,7 @@ function ListingWizard({ initial = defaultForm }) {
           We&apos;ll match you with a StayEase Superhost soon. You can keep building your listing in the meantime.
         </p>
       )}
-      {renderStep()}
+      {!(showSuperhostGuidance && step.id === 'intro-1') && renderStep()}
       <SuperhostGuidanceModal
         open={showSuperhostGuidance && step.id === 'intro-1'}
         onStartAlone={() => setShowSuperhostGuidance(false)}
@@ -1104,142 +1179,8 @@ function ListingWizard({ initial = defaultForm }) {
   );
 }
 
-// Legacy single-page form for editing existing rooms
-function RoomForm({ initial = defaultForm, roomId, isEdit }) {
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ ...defaultForm, ...initial, location: { ...defaultForm.location, ...(initial.location || {}) }, policies: { ...defaultForm.policies, ...(initial.policies || {}) } });
-  const [photos, setPhotos] = useState(initial.photos || []);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
-  const setLoc = (key, val) => setForm((f) => ({ ...f, location: { ...f.location, [key]: val } }));
-  const setPol = (key, val) => setForm((f) => ({ ...f, policies: { ...f.policies, [key]: val } }));
-
-  const save = async (publish) => {
-    setLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const payload = toApiPayload(form, { isAvailable: publish });
-      if (isEdit) {
-        await roomsApi.update(roomId, payload);
-        setSuccess(publish ? 'Listing published successfully.' : 'Draft saved successfully.');
-        setTimeout(() => navigate('/host/rooms'), 1200);
-        return;
-      }
-      await roomsApi.create(payload);
-      setSuccess(publish ? 'Listing created successfully.' : 'Draft saved successfully.');
-      setTimeout(() => navigate('/host/rooms'), 1200);
-    } catch (err) {
-      setError(err.normalized?.message || 'Save failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePhotoUpload = async (file) => {
-    if (!roomId) return;
-    setUploading(true);
-    try {
-      const { data } = await roomsApi.uploadPhoto(roomId, file);
-      setPhotos((prev) => {
-        const next = [...(prev || []), data].filter((p) => p && p.url);
-        const hasPrimary = next.some((p) => p.is_primary);
-        if (!hasPrimary && next.length) next[0] = { ...next[0], is_primary: true };
-        return next;
-      });
-    } catch (err) {
-      setError(err.normalized?.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleReorderPhotos = async (next) => {
-    setPhotos(next);
-    try {
-      await roomsApi.reorderPhotos(roomId, next.map((p) => p.public_id).filter(Boolean));
-    } catch {
-      // keep local order on failure
-    }
-  };
-
-  const handleDeletePhoto = async (photo) => {
-    const pid = photo?.public_id;
-    if (!pid) {
-      setPhotos((prev) => (prev || []).filter((p) => p !== photo));
-      return;
-    }
-
-    try {
-      await roomsApi.deletePhoto(roomId, pid);
-      setPhotos((prev) => (prev || []).filter((p) => p?.public_id !== pid));
-    } catch (err) {
-      throw new Error(err.normalized?.message || 'Could not delete photo');
-    }
-  };
-
-  return (
-    <form onSubmit={(e) => e.preventDefault()}>
-      <ErrorMessage message={error} />
-      {success && (
-        <p className="form-success" role="status" style={{ color: 'var(--success)', marginBottom: '1rem' }}>
-          {success}
-        </p>
-      )}
-      <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-        <h2>Basic Info</h2>
-        <div className="form-row">
-          <div className="form-group"><label className="label">Title</label><input className="input" value={form.title} onChange={(e) => set('title', e.target.value)} required /></div>
-          <div className="form-group"><label className="label">Room Number</label><input className="input" value={form.room_number} onChange={(e) => set('room_number', e.target.value)} required /></div>
-        </div>
-        <div className="form-group"><label className="label">Description (min 50 chars)</label><textarea className="textarea" value={form.description} onChange={(e) => set('description', e.target.value)} required minLength={50} /></div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="label">Category</label>
-            <select className="select" value={form.room_category} onChange={(e) => set('room_category', e.target.value)}>
-              {ROOM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="form-group"><label className="label">Max guests</label><input type="number" className="input" min={1} max={10} value={form.max_guests} onChange={(e) => set('max_guests', Number(e.target.value))} /></div>
-          <div className="form-group"><label className="label">Price/night</label><input type="number" className="input" value={form.price_per_night} onChange={(e) => set('price_per_night', Number(e.target.value))} /></div>
-        </div>
-      </section>
-
-      <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-        <h2>Location</h2>
-        <div className="form-group"><label className="label">Address</label><input className="input" value={form.location.address} onChange={(e) => setLoc('address', e.target.value)} /></div>
-        <div className="form-row">
-          <div className="form-group"><label className="label">City</label><input className="input" value={form.location.city} onChange={(e) => setLoc('city', e.target.value)} /></div>
-          <div className="form-group"><label className="label">Area</label><input className="input" value={form.location.area} onChange={(e) => setLoc('area', e.target.value)} /></div>
-        </div>
-      </section>
-
-      <section className="card amenity-picker-section" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-        <h2>Amenities</h2>
-        <AmenityPicker selected={form.amenities} onChange={(next) => set('amenities', next)} />
-      </section>
-
-      {isEdit && (
-        <section className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-          <h2>Photos</h2>
-          <ImageUploader photos={photos} onUpload={handlePhotoUpload} uploading={uploading} onReorder={handleReorderPhotos} onDelete={handleDeletePhoto} />
-        </section>
-      )}
-
-      <div style={{ display: 'flex', gap: '0.75rem' }}>
-        <button type="button" className="btn btn-outline" onClick={() => save(false)} disabled={loading}>Save as Draft</button>
-        <button type="button" className="btn btn-primary" onClick={() => save(true)} disabled={loading}>Publish</button>
-      </div>
-    </form>
-  );
-}
-
 export default function AddRoom() {
-  return <ListingWizard />;
+  const [searchParams] = useSearchParams();
+  const resumeRoomId = searchParams.get('roomId');
+  return <ListingWizard resumeRoomId={resumeRoomId} />;
 }
-
-export { RoomForm };

@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, MapPin, Minus, Plus, Receipt, Star } from 'lucide-react';
+import { ArrowLeft, Check, Minus, Plus, Receipt, Star } from 'lucide-react';
 import PriceBreakdown from '../../components/PriceBreakdown';
 import DatePicker from '../../components/DatePicker';
 import RoomBadges from '../../components/RoomBadges';
+import RoomFloorPicker from '../../components/RoomFloorPicker';
+import BookingGuestVerification, {
+  defaultGuestVerification,
+  prepareBookingVerification,
+} from '../../components/BookingGuestVerification';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -30,6 +35,22 @@ function formatStayDate(iso) {
   });
 }
 
+function formatStayRange(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return 'Select dates';
+  const start = new Date(`${checkIn}T12:00:00`);
+  const end = new Date(`${checkOut}T12:00:00`);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    const monthYear = start.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    return `${start.getDate()}–${end.getDate()} ${monthYear}`;
+  }
+  return `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)}`;
+}
+
+function scrollToSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 export default function BookRoom() {
   const { roomId } = useParams();
   const [searchParams] = useSearchParams();
@@ -43,8 +64,8 @@ export default function BookRoom() {
   const [offerApplied, setOfferApplied] = useState(null);
   const [offerError, setOfferError] = useState('');
   const [applyingOffer, setApplyingOffer] = useState(false);
-  const [guestName, setGuestName] = useState(user?.name || '');
-  const [guestPhone, setGuestPhone] = useState(user?.phone || '');
+  const [guestVerification, setGuestVerification] = useState(() => defaultGuestVerification(user));
+  const [verificationError, setVerificationError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +81,7 @@ export default function BookRoom() {
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
   const [waitlistError, setWaitlistError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [pendingVerificationPayload, setPendingVerificationPayload] = useState(null);
 
   const dateValidationError = useMemo(() => {
     if (!checkIn || !checkOut) return '';
@@ -68,6 +90,8 @@ export default function BookRoom() {
     if (checkOut <= checkIn) return 'Check-out must be after check-in';
     return '';
   }, [checkIn, checkOut]);
+
+  const datesReady = Boolean(checkIn && checkOut && !dateValidationError);
 
   const activeOfferCode = offerApplied?.code || offerCode;
 
@@ -83,13 +107,10 @@ export default function BookRoom() {
   }, [dateValidationError]);
 
   useEffect(() => {
-    if (user) {
-      setGuestName(user.name || '');
-      setGuestPhone(user.phone || '');
-      setWaitlistName(user.name || '');
-      setWaitlistPhone(user.phone || '');
-    }
-  }, [user?.id, user?.name, user?.phone]);
+    setGuestVerification(defaultGuestVerification(user));
+    setWaitlistName(user?.name || '');
+    setWaitlistPhone(user?.phone || '');
+  }, [user?.id, user?.name, user?.phone, user?.identity_proof]);
 
   useEffect(() => {
     roomsApi.get(roomId).then(({ data }) => setRoom(data)).catch((err) => {
@@ -99,6 +120,15 @@ export default function BookRoom() {
 
   const photo = room?.photos?.find((p) => p.is_primary) || room?.photos?.[0];
   const location = [room?.location?.area, room?.location?.city].filter(Boolean).join(', ');
+
+  const handleSelectRoom = (nextRoomId) => {
+    if (!nextRoomId || nextRoomId === roomId) return;
+    const params = new URLSearchParams();
+    if (checkIn) params.set('check_in', checkIn);
+    if (checkOut) params.set('check_out', checkOut);
+    if (guests) params.set('guests', String(guests));
+    navigate(`/book/${nextRoomId}?${params.toString()}`);
+  };
 
   const handleApplyOffer = async () => {
     const code = offerCode.trim().toUpperCase();
@@ -120,30 +150,38 @@ export default function BookRoom() {
     }
   };
 
-  const handleBook = (e) => {
+  const handleBook = async (e) => {
     e.preventDefault();
     if (!user) {
       navigate('/login');
       return;
     }
-    if (!guestName.trim()) {
-      setError('Guest name is required');
-      return;
-    }
-    if (!/^\d{10}$/.test(guestPhone)) {
-      setError('Enter a valid 10-digit mobile number');
-      return;
-    }
     if (dateError) return;
+    if (!datesReady) {
+      setError('Select valid check-in and check-out dates');
+      return;
+    }
     if (!acceptedTerms) {
       setError('Please accept the Terms of Service, Privacy Policy, and Cookie Policy to continue');
       return;
     }
+
     setError('');
-    setConfirmOpen(true);
+    setVerificationError('');
+    try {
+      const verificationPayload = await prepareBookingVerification(guestVerification, user);
+      setPendingVerificationPayload(verificationPayload);
+      setConfirmOpen(true);
+    } catch (err) {
+      if (err.fieldErrors) {
+        setGuestVerification((prev) => ({ ...prev, fieldErrors: err.fieldErrors }));
+      }
+      setVerificationError(err.message || 'Complete guest verification to continue');
+    }
   };
 
   const handleConfirmBooking = async () => {
+    if (!pendingVerificationPayload) return;
     setSubmitting(true);
     setError('');
     setConflictError('');
@@ -155,9 +193,8 @@ export default function BookRoom() {
         check_out_date: checkOut,
         num_guests: guests,
         offer_code: activeOfferCode || undefined,
-        booking_for: 'self',
-        staying_guest_name: guestName.trim(),
-        staying_guest_phone: guestPhone,
+        preferred_room_number: room?.room_number || undefined,
+        ...pendingVerificationPayload,
       });
       const { data: paid } = await bookingsApi.pay(booking._id);
       setConfirmOpen(false);
@@ -167,8 +204,14 @@ export default function BookRoom() {
       if (err.normalized?.status === 409) {
         setConflictError(err.normalized.message || 'Room not available for selected dates');
         setShowWaitlistForm(true);
-        setWaitlistName(guestName);
-        setWaitlistPhone(guestPhone);
+        const name = guestVerification.bookingFor === 'other'
+          ? guestVerification.stayingGuestName
+          : user?.name;
+        const phone = guestVerification.bookingFor === 'other'
+          ? guestVerification.stayingGuestPhone
+          : user?.phone;
+        setWaitlistName(name || '');
+        setWaitlistPhone(phone || '');
         setError('');
       } else if (err.normalized) {
         setError(err.normalized.message);
@@ -281,53 +324,13 @@ export default function BookRoom() {
         Back to listing
       </Link>
 
-      <div className="card book-room__section" style={{ marginBottom: '1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        {photo?.url ? (
-          <SafeImage src={photo.url} alt={room.title} style={{ width: 160, height: 120, objectFit: 'cover', borderRadius: 8 }} />
-        ) : (
-          <div style={{ width: 160, height: 120, background: 'var(--border)', borderRadius: 8 }} />
-        )}
-        <div>
-          <h1 className="book-room__title" style={{ marginBottom: '0.25rem' }}>{room.title}</h1>
-          <p className="listing-muted">{room.room_category} · {location}</p>
-          <p><strong>{formatCurrency(room.price_per_night)}</strong> / night</p>
-          {room.avg_rating > 0 && (
-            <p className="book-room__summary-rating">
-              <Icon icon={Star} size={ICON.sm} /> {room.avg_rating.toFixed(2)}
-            </p>
-          )}
-        </div>
-      </div>
+      <h1 className="book-room__page-title">Confirm and pay</h1>
 
       <form className="book-room-layout" onSubmit={handleBook}>
         <div className="book-room__main">
-          <section className="book-room__section card">
-            <h2>Guest details</h2>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="label">Guest name</label>
-                <input
-                  className="input"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="label">Mobile (10 digits)</label>
-                <input
-                  className="input"
-                  value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  pattern="\d{10}"
-                  required
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="book-room__section card">
-            <h2>Your trip</h2>
+          <section className="book-room__section card" id="booking-step-dates">
+            <h2>1. Dates &amp; guests</h2>
+            <p className="book-room__section-lead">Choose your stay dates — like picking a show date on BookMyShow.</p>
             {dateError && <ErrorMessage message={dateError} />}
             {pricingError && <ErrorMessage message={pricingError} />}
             <div className="form-row book-room__dates">
@@ -396,7 +399,31 @@ export default function BookRoom() {
             />
           </section>
 
-          <section className="book-room__section card">
+          {datesReady && (
+            <section className="book-room__section card" id="booking-step-room">
+              <h2>2. Pick your room</h2>
+              <p className="book-room__section-lead">Select a room on the floor map — compare views, sunrise, and sunset sides.</p>
+              <RoomFloorPicker
+                roomId={roomId}
+                currentRoom={room}
+                checkIn={checkIn}
+                checkOut={checkOut}
+                onSelectRoom={handleSelectRoom}
+              />
+            </section>
+          )}
+
+          {datesReady && (
+            <BookingGuestVerification
+              value={guestVerification}
+              onChange={setGuestVerification}
+              user={user}
+              error={verificationError}
+            />
+          )}
+
+          <section className="book-room__section card" id="booking-step-confirm">
+            <h2>4. Confirm &amp; pay</h2>
             <ErrorMessage message={error} />
             {conflictError && (
               <div className="host-alert-banner" role="alert" style={{ marginBottom: '1rem' }}>
@@ -443,19 +470,81 @@ export default function BookRoom() {
             <button
               type="submit"
               className="btn btn-primary book-room__submit"
-              disabled={submitting || !!dateError || !acceptedTerms || !checkIn || !checkOut}
+              disabled={submitting || !datesReady || !acceptedTerms}
             >
               {submitting ? 'Confirming…' : 'Confirm Booking'}
             </button>
           </section>
         </div>
 
-        <aside className="book-room__summary card">
-          <h3>Price summary</h3>
+        <aside className="book-room__summary card" aria-label="Booking summary">
+          <div className="book-room__summary-header">
+            {photo?.url ? (
+              <SafeImage src={photo.url} alt={room.title} className="book-room__summary-photo" />
+            ) : (
+              <div className="book-room__summary-photo book-room__summary-photo--placeholder" aria-hidden />
+            )}
+            <div className="book-room__summary-header-body">
+              <h3>{room.title}</h3>
+              {room.avg_rating > 0 && (
+                <p className="book-room__summary-rating">
+                  <Icon icon={Star} size={ICON.sm} fill="currentColor" />
+                  {room.avg_rating.toFixed(2)}
+                  {room.total_reviews > 0 && ` (${room.total_reviews})`}
+                </p>
+              )}
+              {location && <p className="book-room__summary-loc">{location}</p>}
+            </div>
+          </div>
+
+          <div className="book-room__summary-policy">
+            <strong>Free cancellation</strong>
+            <p>Cancel before check-in for a full refund on eligible bookings.</p>
+            <Link to="/terms#cancellation">Full policy</Link>
+          </div>
+
+          <div className="book-room__summary-rows">
+            <div className="book-room__summary-row book-room__summary-row--editable">
+              <div className="book-room__summary-row-text">
+                <span className="book-room__summary-label">Dates</span>
+                <strong>{formatStayRange(checkIn, checkOut)}</strong>
+              </div>
+              <button
+                type="button"
+                className="book-room__summary-change"
+                onClick={() => scrollToSection('booking-step-dates')}
+              >
+                Change
+              </button>
+            </div>
+            <div className="book-room__summary-row book-room__summary-row--editable">
+              <div className="book-room__summary-row-text">
+                <span className="book-room__summary-label">Guests</span>
+                <strong>{guests} guest{guests !== 1 ? 's' : ''}</strong>
+              </div>
+              <button
+                type="button"
+                className="book-room__summary-change"
+                onClick={() => scrollToSection('booking-step-dates')}
+              >
+                Change
+              </button>
+            </div>
+            {room.room_number && (
+              <div className="book-room__summary-row">
+                <span>Room</span>
+                <strong>{room.room_number}</strong>
+              </div>
+            )}
+          </div>
+
+          <h4 className="book-room__summary-price-title">Price details</h4>
           {pricingLoading && <Spinner label="Calculating price…" />}
           {pricing && <PriceBreakdown pricing={pricing} compact />}
-          {!pricing && !pricingLoading && checkIn && checkOut && !dateError && (
-            <p className="book-room__pricing-loading">Select valid dates for pricing</p>
+          {!pricing && !pricingLoading && (
+            <p className="book-room__pricing-loading">
+              {datesReady ? 'Select valid dates for pricing' : 'Choose dates to see your total'}
+            </p>
           )}
           {nights > 0 && pricing && (
             <p className="book-room__gst-note">{nights} night{nights !== 1 ? 's' : ''} · incl. GST</p>
@@ -470,8 +559,12 @@ export default function BookRoom() {
         title="Confirm your booking?"
         message={
           pricing
-            ? `Book ${room.title} for ${formatCurrency(pricing.total_price)} incl. GST?`
-            : `Confirm booking for ${room.title}?`
+            ? `Book Room ${room.room_number || '—'} for ${formatCurrency(pricing.total_price)} incl. GST?${
+              guestVerification.bookingFor === 'other'
+                ? ` Checking in: ${guestVerification.stayingGuestName}.`
+                : ''
+            }`
+            : `Confirm booking for Room ${room.room_number || room.title}?`
         }
         confirmLabel="Yes, book now"
         cancelLabel="Go back"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Grid3x3 } from 'lucide-react';
 import SafeImage from './SafeImage';
+import ImageLightbox from './ImageLightbox';
 import { getRoomGalleryImages } from '../utils/roomImages';
 
 export default function RoomImageGallery({ photos = [], roomId, title = 'Room', initialPhotoId = '' }) {
@@ -17,8 +18,13 @@ export default function RoomImageGallery({ photos = [], roomId, title = 'Room', 
 
   const openLightbox = (index) => setLightbox(index);
   const closeLightbox = () => setLightbox(null);
-  const prev = () => setLightbox((i) => (i === 0 ? images.length - 1 : i - 1));
-  const next = () => setLightbox((i) => (i === images.length - 1 ? 0 : i + 1));
+
+  const lightboxImages = images.map((photo, idx) => ({
+    url: photo.url,
+    alt: idx === 0 ? title : `${title} ${idx + 1}`,
+    fallbackSeed: roomId,
+    fallbackIndex: idx,
+  }));
 
   return (
     <>
@@ -57,27 +63,15 @@ export default function RoomImageGallery({ photos = [], roomId, title = 'Room', 
         </div>
       </div>
 
-      {lightbox !== null && (
-        <div className="lightbox" role="dialog" aria-modal="true">
-          <button type="button" className="lightbox__close" onClick={closeLightbox} aria-label="Close">
-            <X size={20} />
-          </button>
-          <button type="button" className="lightbox__nav lightbox__nav--prev" onClick={prev} aria-label="Previous">
-            <ChevronLeft size={28} />
-          </button>
-          <SafeImage
-            src={images[lightbox].url}
-            alt={title}
-            className="lightbox__image"
-            fallbackSeed={roomId}
-            fallbackIndex={lightbox}
-          />
-          <button type="button" className="lightbox__nav lightbox__nav--next" onClick={next} aria-label="Next">
-            <ChevronRight size={28} />
-          </button>
-          <span className="lightbox__counter">{lightbox + 1} / {images.length}</span>
-        </div>
-      )}
+      <ImageLightbox
+        open={lightbox !== null}
+        index={lightbox}
+        images={lightboxImages}
+        onClose={closeLightbox}
+        onIndexChange={setLightbox}
+        roomId={roomId}
+        ariaLabel={`${title} photos`}
+      />
     </>
   );
 }

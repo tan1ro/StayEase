@@ -14,11 +14,16 @@ import {
   User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useBecomeHost } from '../hooks/useBecomeHost';
+import LogoutConfirmModal from './LogoutConfirmModal';
 import { Icon, ICON } from './ui/Icon';
 
 export default function UserMenu() {
-  const { user, logout, canAccessHostPortal } = useAuth();
+  const { user, logout, canAccessHostPortal, isAuthenticated } = useAuth();
+  const becomeHost = useBecomeHost();
   const [open, setOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
 
@@ -41,8 +46,19 @@ export default function UserMenu() {
 
   const handleLogout = () => {
     logout();
+    setLogoutOpen(false);
     setOpen(false);
     navigate('/');
+  };
+
+  const handleBecomeHost = async () => {
+    setUpgrading(true);
+    try {
+      setOpen(false);
+      await becomeHost();
+    } finally {
+      setUpgrading(false);
+    }
   };
 
   const menuItems = [
@@ -56,14 +72,16 @@ export default function UserMenu() {
     { disabled: true, icon: Globe, label: 'Languages & currency (INR)' },
     { to: '/help', icon: HelpCircle, label: 'Help Centre' },
     { divider: true },
-    canAccessHostPortal
-      ? { to: '/', icon: Home, label: 'Switch to guest' }
-      : { to: '/register?as=host', icon: Home, label: 'Become a host' },
     ...(canAccessHostPortal
-      ? [{ to: '/host', icon: Building2, label: 'Host dashboard' }]
-      : []),
+      ? [
+          { to: '/host', icon: Building2, label: 'Switch to host' },
+          { to: '/', icon: Home, label: 'Switch to guest' },
+        ]
+      : isAuthenticated
+        ? [{ action: handleBecomeHost, icon: Building2, label: upgrading ? 'Upgrading…' : 'Become a host', disabled: upgrading }]
+        : [{ to: '/register?as=host', icon: Building2, label: 'Become a host' }]),
     { divider: true },
-    { action: handleLogout, icon: LogOut, label: 'Log out' },
+    { action: () => { setOpen(false); setLogoutOpen(true); }, icon: LogOut, label: 'Log out' },
   ];
 
   return (
@@ -85,7 +103,13 @@ export default function UserMenu() {
             }
             if (item.action) {
               return (
-                <button key={item.label} type="button" className="user-menu__item" onClick={item.action}>
+                <button
+                  key={item.label}
+                  type="button"
+                  className="user-menu__item"
+                  onClick={item.action}
+                  disabled={item.disabled}
+                >
                   <Icon icon={item.icon} size={ICON.md} /> {item.label}
                 </button>
               );
@@ -105,6 +129,11 @@ export default function UserMenu() {
           })}
         </div>
       )}
+      <LogoutConfirmModal
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

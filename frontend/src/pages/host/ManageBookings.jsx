@@ -1,14 +1,30 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Calendar, Download, IndianRupee, Users, X } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import StatusBadge from '../../components/StatusBadge';
 import ConfirmModal from '../../components/ConfirmModal';
+import {
+  HostEmpty,
+  HostHero,
+  HostKpi,
+  HostKpiGrid,
+  HostPage,
+  HostPanel,
+  HostTabs,
+} from '../../components/host/HostPageLayout';
 import { bookingsApi, formatCurrency } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 
 const FILTERS = ['', 'confirmed', 'completed', 'cancelled'];
 const TAB_LABELS = ['All', 'Confirmed', 'Completed', 'Cancelled'];
+
+function formatStayRange(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return '—';
+  const fmt = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return `${fmt(checkIn)} → ${fmt(checkOut)}`;
+}
 
 export default function ManageBookings() {
   const { user } = useAuth();
@@ -19,16 +35,14 @@ export default function ManageBookings() {
   const [error, setError] = useState('');
   const [cancelId, setCancelId] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const load = async () => {
     if (!hostId) return;
     setLoading(true);
     setError('');
     try {
-      const params = {
-        host_id: hostId,
-        ...(filter ? { status_filter: filter } : {}),
-      };
+      const params = { host_id: hostId, ...(filter ? { status_filter: filter } : {}) };
       const { data } = await bookingsApi.list(params);
       setBookings(data || []);
     } catch (err) {
@@ -39,6 +53,22 @@ export default function ManageBookings() {
   };
 
   useEffect(() => { load(); }, [filter, hostId]);
+
+  const handleInvoice = async (bookingId) => {
+    setDownloadingId(bookingId);
+    setError('');
+    try {
+      const { data } = await bookingsApi.invoice(bookingId);
+      const url = data?.pdf_url || data?.invoice_url;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not load invoice');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const confirmCancel = async () => {
     if (!cancelId) return;
@@ -57,74 +87,81 @@ export default function ManageBookings() {
 
   if (loading) return <Spinner label="Loading bookings..." />;
 
-  return (
-    <div className="host-page">
-      <h1 className="page-title">Bookings</h1>
+  const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
+  const revenue = bookings.reduce((s, b) => s + (b.subtotal || 0), 0);
+  const gstTotal = bookings.reduce((s, b) => s + (b.gst_amount || 0), 0);
 
-      <div className="tabs">
-        {TAB_LABELS.map((label, i) => (
-          <button
-            key={label}
-            type="button"
-            className={`tab ${filter === FILTERS[i] ? 'tab--active' : ''}`}
-            onClick={() => setFilter(FILTERS[i])}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+  return (
+    <HostPage>
+      <HostHero
+        title="Bookings"
+        subtitle="Track guest reservations, GST amounts, and cancellation actions."
+        pills={[`${bookings.length} shown`, `${confirmed} confirmed`]}
+      />
+
+      <HostKpiGrid>
+        <HostKpi icon={Users} variant="bookings" label="Bookings" value={bookings.length} hint={TAB_LABELS[FILTERS.indexOf(filter)] || 'Filtered'} />
+        <HostKpi icon={IndianRupee} variant="earnings" label="Subtotal" value={formatCurrency(revenue)} hint="Before GST" />
+        <HostKpi icon={IndianRupee} variant="occupancy" label="GST" value={formatCurrency(gstTotal)} hint="CGST + SGST" />
+        <HostKpi icon={Calendar} variant="rating" label="Confirmed" value={confirmed} hint="Active stays" />
+      </HostKpiGrid>
+
+      <HostTabs
+        tabs={TAB_LABELS.map((label, i) => ({ id: FILTERS[i], label }))}
+        active={filter}
+        onChange={setFilter}
+      />
 
       <ErrorMessage message={error} onRetry={load} />
 
-      {bookings.length === 0 ? (
-        <p className="host-page__subtitle">No bookings found.</p>
-      ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Guest Name</th>
-                <th>Room</th>
-                <th>Check-in</th>
-                <th>Check-out</th>
-                <th>Nights</th>
-                <th>Amount</th>
-                <th>GST</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.map((b) => (
-                <tr key={b._id || b.id}>
-                  <td>{b.guest_name}</td>
-                  <td>{b.room_title || b.room_id?.slice(-6)}</td>
-                  <td>{b.check_in_date}</td>
-                  <td>{b.check_out_date}</td>
-                  <td>{b.total_nights ?? '—'}</td>
-                  <td>{formatCurrency(b.subtotal)}</td>
-                  <td>{formatCurrency(b.gst_amount)}</td>
-                  <td>{formatCurrency(b.total_price)}</td>
-                  <td><StatusBadge status={b.status} /></td>
-                  <td>
-                    {b.status === 'confirmed' && (
+      <HostPanel title="Reservation list" subtitle="Download invoices from each completed booking">
+        {bookings.length === 0 ? (
+          <HostEmpty title="No bookings found" description="Bookings matching this filter will appear here." />
+        ) : (
+          <div className="host-dashboard__bookings">
+            {bookings.map((b) => (
+              <article key={b._id || b.id} className="host-dashboard__booking">
+                <div>
+                  <div className="host-dashboard__booking-name">{b.guest_name}</div>
+                  <div className="host-dashboard__booking-dates">
+                    {b.room_title || 'Room'} · {formatStayRange(b.check_in_date, b.check_out_date)} · {b.total_nights ?? '—'} nights
+                  </div>
+                </div>
+                <div>
+                  <div className="host-dashboard__booking-amount">{formatCurrency(b.total_price)}</div>
+                  <div className="host-dashboard__booking-paid">
+                    {formatCurrency(b.subtotal)} + {formatCurrency(b.gst_amount)} GST
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                  <StatusBadge status={b.status} />
+                  {(b.status === 'confirmed' || b.status === 'completed') && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', justifyContent: 'flex-end' }}>
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setCancelId(b._id || b.id)}
-                        aria-label="Cancel booking"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleInvoice(b._id || b.id)}
+                        disabled={downloadingId === (b._id || b.id)}
                       >
-                        <X size={14} /> Cancel
+                        <Download size={14} />
+                        {downloadingId === (b._id || b.id) ? '…' : 'Invoice'}
                       </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      <Link to={`/receipt/${b._id || b.id}`} className="btn btn-ghost btn-sm">
+                        Receipt
+                      </Link>
+                    </div>
+                  )}
+                  {b.status === 'confirmed' && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCancelId(b._id || b.id)}>
+                      <X size={14} /> Cancel
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </HostPanel>
 
       <ConfirmModal
         open={!!cancelId}
@@ -134,6 +171,6 @@ export default function ManageBookings() {
         onConfirm={confirmCancel}
         onClose={() => !cancelling && setCancelId(null)}
       />
-    </div>
+    </HostPage>
   );
 }

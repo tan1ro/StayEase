@@ -10,7 +10,6 @@ import {
   Shield,
   Calendar,
   Flag,
-  MapPin,
   ChevronRight,
   Wifi,
   UtensilsCrossed,
@@ -38,9 +37,10 @@ import { getCancellationSummary } from '../../utils/cancellationTimeline';
 import ErrorMessage from '../../components/ErrorMessage';
 import ReviewCard from '../../components/ReviewCard';
 import WriteReviewModal from '../../components/WriteReviewModal';
-import RoomImageCarousel from '../../components/RoomImageCarousel';
+import RoomImageGallery from '../../components/RoomImageGallery';
+import ImageLightbox from '../../components/ImageLightbox';
+import ListingLocationMap from '../../components/ListingLocationMap';
 import Spinner from '../../components/Spinner';
-import WeatherWidget from '../../components/WeatherWidget';
 import { attractionsApi, reviewsApi, roomsApi, wishlistApi, formatCurrency } from '../../api/api';
 import { getAvatarUrl } from '../../utils/roomImages';
 import SafeImage from '../../components/SafeImage';
@@ -48,21 +48,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { Icon, ICON } from '../../components/ui/Icon';
 import { listingParamsFromSearch } from '../../utils/listingParams';
-
-const ATTRACTION_TABS = [
-  { id: 'food', label: 'Food', match: ['food', 'restaurant', 'cafe', 'dining'] },
-  { id: 'temples', label: 'Temples', match: ['temple', 'heritage', 'spiritual', 'religious'] },
-  { id: 'parks', label: 'Parks', match: ['nature', 'park', 'garden'] },
-  { id: 'shopping', label: 'Shopping', match: ['shopping', 'market', 'mall'] },
-  { id: 'transport', label: 'Transport', match: ['transport', 'transit', 'metro', 'bus'] },
-];
-
-function matchesAttractionTab(attraction, tabId) {
-  const tab = ATTRACTION_TABS.find((item) => item.id === tabId);
-  if (!tab) return true;
-  const category = (attraction.category || attraction.type || '').toLowerCase();
-  return tab.match.some((token) => category.includes(token));
-}
 
 function buildSleepCards(room, roomId) {
   const photos = room?.photos || [];
@@ -193,11 +178,12 @@ export default function RoomDetail({ hostPreview = false }) {
   const { openAuthGate } = useOnboarding();
   const [room, setRoom] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [propertyReviewStats, setPropertyReviewStats] = useState({
+    property_name: '',
+    avg_rating: 0,
+    total_reviews: 0,
+  });
   const [attractions, setAttractions] = useState([]);
-  const [weather, setWeather] = useState(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState('');
-  const [attractionTab, setAttractionTab] = useState('food');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
@@ -215,6 +201,7 @@ export default function RoomDetail({ hostPreview = false }) {
     booking: null,
   });
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState('');
 
   const listingParams = useMemo(() => listingParamsFromSearch(searchParams), [searchParams]);
   const { checkIn: checkInParam, checkOut: checkOutParam, guests: guestsParam } = listingParams;
@@ -225,6 +212,7 @@ export default function RoomDetail({ hostPreview = false }) {
     guests: guestsParam,
   });
   const [widgetPricing, setWidgetPricing] = useState(null);
+  const [sleepLightboxIndex, setSleepLightboxIndex] = useState(null);
 
   useEffect(() => {
     setWidgetDates({
@@ -256,35 +244,24 @@ export default function RoomDetail({ hostPreview = false }) {
     const load = async () => {
       setLoading(true);
       setError(null);
-      setWeather(null);
-      setWeatherError('');
       try {
         const { data: roomData } = await roomsApi.get(id);
         setRoom(roomData);
         setSaved(user?.wishlist?.includes(id));
-
-        const city = roomData.location?.city || 'Bangalore';
-        const lat = roomData.location?.lat;
-        const lon = roomData.location?.lng ?? roomData.location?.lon;
-
-        const [reviewsRes, attrRes] = await Promise.all([
-          reviewsApi.byRoom(id).catch(() => ({ data: [] })),
-          attractionsApi.byCity(city).catch(() => ({ data: [] })),
+        const [propRes, attrRes] = await Promise.all([
+          reviewsApi.byProperty(id).catch(() => ({
+            data: { reviews: [], avg_rating: 0, total_reviews: 0, property_name: '' },
+          })),
+          attractionsApi.byCity(roomData.location?.city || 'Bangalore').catch(() => ({ data: [] })),
         ]);
-        setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
-        setAttractions(Array.isArray(attrRes.data) ? attrRes.data : []);
-
-        if (lat != null && lon != null) {
-          setWeatherLoading(true);
-          try {
-            const { data: weatherData } = await attractionsApi.weather(lat, lon);
-            setWeather(weatherData);
-          } catch (err) {
-            setWeatherError(err.normalized?.message || 'Weather unavailable');
-          } finally {
-            setWeatherLoading(false);
-          }
-        }
+        const propertyData = propRes.data || {};
+        setPropertyReviewStats({
+          property_name: propertyData.property_name || '',
+          avg_rating: propertyData.avg_rating || 0,
+          total_reviews: propertyData.total_reviews || 0,
+        });
+        setReviews(propertyData.reviews || []);
+        setAttractions(attrRes.data);
       } catch (err) {
         setError(err.normalized?.message || 'Room not found');
       } finally {
@@ -295,12 +272,20 @@ export default function RoomDetail({ hostPreview = false }) {
   }, [id, user?.wishlist]);
 
   const reloadListingReviews = async () => {
-    const [roomRes, reviewsRes] = await Promise.all([
+    const [roomRes, propertyRes] = await Promise.all([
       roomsApi.get(id),
-      reviewsApi.byRoom(id).catch(() => ({ data: [] })),
+      reviewsApi.byProperty(id).catch(() => ({
+        data: { reviews: [], avg_rating: 0, total_reviews: 0, property_name: '' },
+      })),
     ]);
+    const propertyData = propertyRes.data || {};
     setRoom(roomRes.data);
-    setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
+    setPropertyReviewStats({
+      property_name: propertyData.property_name || '',
+      avg_rating: propertyData.avg_rating || 0,
+      total_reviews: propertyData.total_reviews || 0,
+    });
+    setReviews(propertyData.reviews || []);
   };
 
   useEffect(() => {
@@ -321,6 +306,7 @@ export default function RoomDetail({ hostPreview = false }) {
   }, [id, user?.id]);
 
   const handleOpenReview = () => {
+    setReviewNotice('');
     if (!user) {
       openAuthGate({
         title: 'Log in to write a review',
@@ -331,7 +317,15 @@ export default function RoomDetail({ hostPreview = false }) {
     }
     if (reviewEligibility.can_review) {
       setReviewOpen(true);
+      return;
     }
+    if (reviewEligibility.has_review || reviewEligibility.review_after) {
+      document.getElementById('review-status')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    setReviewNotice(
+      `Only guests who have completed a paid stay at ${propertyName} can leave a review. Book a room and return after checkout to share your experience.`,
+    );
   };
 
   const handleReviewSubmitted = async () => {
@@ -348,11 +342,15 @@ export default function RoomDetail({ hostPreview = false }) {
       });
       return;
     }
+    const next = !saved;
+    setSaved(next);
     try {
       const { data } = await wishlistApi.toggle(id);
-      setSaved(data.wishlisted ?? data.added);
+      setSaved(data.wishlisted ?? data.added ?? next);
       await refreshUser();
-    } catch { /* handled */ }
+    } catch {
+      setSaved(!next);
+    }
   };
 
   const handleShare = async () => {
@@ -428,10 +426,8 @@ export default function RoomDetail({ hostPreview = false }) {
     return `${hour12}:${minuteStr} ${ampm}`;
   };
 
-  const propertyName = room.title?.split(' · ')[0] || room.title;
-  const displayRating = reviews.length
-    ? reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length
-    : room.avg_rating || 0;
+  const propertyName = propertyReviewStats.property_name || room.title?.split(' · ')[0] || room.title;
+  const displayRating = propertyReviewStats.avg_rating || room.avg_rating || 0;
   const ratingScore = Number(displayRating) || 4.5;
 
   const ratingCategories = [
@@ -443,9 +439,8 @@ export default function RoomDetail({ hostPreview = false }) {
     { label: 'Value', score: Math.max(4, ratingScore - 0.2).toFixed(1) },
   ];
 
-  const reviewCount = reviews.length || room.total_reviews || 0;
-  const visibleReviews = reviews.slice(0, 3);
-  const filteredAttractions = attractions.filter((item) => matchesAttractionTab(item, attractionTab));
+  const reviewCount = propertyReviewStats.total_reviews || reviews.length || room.total_reviews || 0;
+  const visibleReviews = reviews.slice(0, 4);
 
   const mobileBookUrl = widgetDates.checkIn && widgetDates.checkOut
     ? `/book/${id}?check_in=${widgetDates.checkIn}&check_out=${widgetDates.checkOut}&guests=${widgetDates.guests}`
@@ -467,7 +462,12 @@ export default function RoomDetail({ hostPreview = false }) {
         {shareNotice && <p className="listing-share-notice" role="status">{shareNotice}</p>}
       </div>
 
-      <RoomImageCarousel photos={room.photos} roomId={id} />
+      <RoomImageGallery
+        photos={room.photos}
+        roomId={id}
+        title={room.title}
+        initialPhotoId={listingParams.photoId}
+      />
 
       <div className="listing-body">
         <div className="listing-main">
@@ -556,14 +556,22 @@ export default function RoomDetail({ hostPreview = false }) {
           <section className="listing-section">
             <h3>Where you&apos;ll sleep</h3>
             <div className="sleep-cards">
-              {sleepCards.map((card) => (
+              {sleepCards.map((card, index) => (
                 <div key={card.key} className={`sleep-card${card.key !== 'bedroom' ? ' sleep-card--view' : ''}`}>
-                  <SafeImage
-                    src={card.image}
-                    alt={card.alt}
-                    className="sleep-card__image"
-                    fallbackSeed={card.fallbackSeed}
-                  />
+                  <button
+                    type="button"
+                    className="sleep-card__image-btn"
+                    onClick={() => card.image && setSleepLightboxIndex(index)}
+                    aria-label={`View ${card.title} photo`}
+                    disabled={!card.image}
+                  >
+                    <SafeImage
+                      src={card.image}
+                      alt={card.alt}
+                      className="sleep-card__image"
+                      fallbackSeed={card.fallbackSeed}
+                    />
+                  </button>
                   <div className="sleep-card__info">
                     <strong>{card.title}</strong>
                     <span>{card.subtitle}</span>
@@ -571,6 +579,22 @@ export default function RoomDetail({ hostPreview = false }) {
                 </div>
               ))}
             </div>
+            {sleepLightboxIndex !== null && sleepCards[sleepLightboxIndex]?.image && (
+              <ImageLightbox
+                open
+                index={sleepLightboxIndex}
+                images={sleepCards.map((card, idx) => ({
+                  image: card.image,
+                  alt: card.alt,
+                  fallbackSeed: card.fallbackSeed,
+                  fallbackIndex: idx,
+                }))}
+                onClose={() => setSleepLightboxIndex(null)}
+                onIndexChange={setSleepLightboxIndex}
+                roomId={id}
+                ariaLabel="Sleep area photo viewer"
+              />
+            )}
           </section>
 
           <hr className="listing-divider" />
@@ -600,36 +624,43 @@ export default function RoomDetail({ hostPreview = false }) {
               <h3>
                 <Icon icon={Star} size={ICON.md} fill="currentColor" /> {displayRating > 0 ? displayRating.toFixed(2) : '—'} · {reviewCount} hotel reviews
               </h3>
-              {reviewEligibility.can_review && (
+              {!hostPreview && (
                 <button type="button" className="btn btn-primary btn-sm" onClick={handleOpenReview}>
                   <Icon icon={Star} size={ICON.sm} /> Write a review
                 </button>
               )}
             </div>
-            {reviewEligibility.can_review && (
-              <div className="listing-review-cta">
-                <p>You stayed at {propertyName} recently. Share your hotel experience to help other travellers.</p>
-                <button type="button" className="listing-btn-outline" onClick={handleOpenReview}>
-                  Rate this hotel
-                </button>
-              </div>
-            )}
-            {reviewEligibility.review_after && !reviewEligibility.can_review && (
-              <p className="listing-review-pending" role="status">
-                You can review {propertyName} after checkout on{' '}
-                {new Date(`${reviewEligibility.review_after}T12:00:00`).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-                .
-              </p>
-            )}
-            {reviewEligibility.has_review && !reviewEligibility.can_review && (
-              <p className="listing-review-thanks" role="status">
-                Thanks — you&apos;ve already reviewed your stay at {propertyName}.
-              </p>
-            )}
+            <div id="review-status">
+              {reviewNotice && (
+                <p className="listing-review-pending" role="status">
+                  {reviewNotice}
+                </p>
+              )}
+              {reviewEligibility.can_review && (
+                <div className="listing-review-cta">
+                  <p>You stayed at {propertyName} recently. Share your hotel experience to help other travellers.</p>
+                  <button type="button" className="listing-btn-outline" onClick={handleOpenReview}>
+                    Rate this hotel
+                  </button>
+                </div>
+              )}
+              {reviewEligibility.review_after && !reviewEligibility.can_review && (
+                <p className="listing-review-pending" role="status">
+                  You can review {propertyName} after checkout on{' '}
+                  {new Date(`${reviewEligibility.review_after}T12:00:00`).toLocaleDateString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                  .
+                </p>
+              )}
+              {reviewEligibility.has_review && !reviewEligibility.can_review && (
+                <p className="listing-review-thanks" role="status">
+                  Thanks — you&apos;ve already reviewed your stay at {propertyName}.
+                </p>
+              )}
+            </div>
             <div className="rating-grid">
               {ratingCategories.map(({ label, score }) => (
                 <div key={label} className="rating-bar">
@@ -642,7 +673,14 @@ export default function RoomDetail({ hostPreview = false }) {
               ))}
             </div>
             {reviews.length === 0 ? (
-              <p className="listing-muted">No reviews yet.</p>
+              <div className="listing-review-empty">
+                <p className="listing-muted">No reviews yet.</p>
+                {!hostPreview && (
+                  <button type="button" className="listing-btn-outline" onClick={handleOpenReview}>
+                    Write the first review
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 <div className="reviews-grid">
@@ -650,7 +688,7 @@ export default function RoomDetail({ hostPreview = false }) {
                     <ReviewCard key={r._id} review={r} compact />
                   ))}
                 </div>
-                {reviews.length > 3 && (
+                {reviews.length > 4 && (
                   <button
                     type="button"
                     className="listing-btn-outline"
@@ -671,52 +709,15 @@ export default function RoomDetail({ hostPreview = false }) {
             <p className="listing-muted listing-location-name">
               {room.location?.area}, {room.location?.city}, India
             </p>
-            <div className="listing-map">
-              <Icon icon={MapPin} size={ICON.xl} />
-              <span>{room.location?.city}</span>
-            </div>
+            <ListingLocationMap room={room} roomId={id} />
             <p className="listing-muted">
-              This listing&apos;s location is verified. The exact address will be provided after booking.
+              Location shown is approximate within the listed neighbourhood. The exact address will be provided after booking.
             </p>
-            {weatherLoading ? (
-              <Spinner label="Loading weather..." />
-            ) : (
-              <>
-                <ErrorMessage message={weatherError} />
-                <WeatherWidget weather={weather} loading={false} />
-              </>
-            )}
             {attractions.length > 0 && (
               <div className="listing-nearby">
-                <h4>Nearby attractions</h4>
-                <div className="tabs" style={{ marginBottom: '1rem' }}>
-                  {ATTRACTION_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={`tab${attractionTab === tab.id ? ' tab--active' : ''}`}
-                      onClick={() => setAttractionTab(tab.id)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-                {filteredAttractions.length === 0 ? (
-                  <p className="listing-muted">No attractions in this category nearby.</p>
-                ) : (
-                  <div className="listing-modal__attractions">
-                    {filteredAttractions.slice(0, 4).map((item) => (
-                      <div key={item._id || item.id || item.name} className="listing-modal__attraction">
-                        <strong>{item.name}</strong>
-                        <p>{item.description}</p>
-                        {item.distance_km != null && (
-                          <span className="listing-muted">{item.distance_km} km away</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {attractions.length > 4 && (
+                <h4>Neighbourhood highlights</h4>
+                <p>{attractions[0]?.description}</p>
+                {attractions.length > 1 && (
                   <button
                     type="button"
                     className="listing-show-more"
@@ -863,6 +864,10 @@ export default function RoomDetail({ hostPreview = false }) {
         reviews={reviews}
         roomTitle={propertyName}
         avgRating={displayRating}
+        onWriteReview={!hostPreview ? () => {
+          setReviewsModalOpen(false);
+          handleOpenReview();
+        } : undefined}
       />
       <AmenitiesModal
         open={amenitiesModalOpen}

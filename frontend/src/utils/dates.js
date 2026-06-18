@@ -82,6 +82,50 @@ export function maxBookableMonthISO(monthsAhead = BOOKING_CALENDAR_MONTHS) {
   return toISODate(new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1)).slice(0, 7);
 }
 
+export function minBirthDateISO() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 100);
+  return toISODate(date);
+}
+
+export const MIN_SIGNUP_AGE = 18;
+
+/** Latest birth date that still satisfies the minimum signup age. */
+export function maxBirthDateISO(minAge = MIN_SIGNUP_AGE) {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - minAge);
+  return toISODate(date);
+}
+
+export function getBirthYearRange(minAge = MIN_SIGNUP_AGE) {
+  const maxYear = new Date().getFullYear() - minAge;
+  const minYear = new Date().getFullYear() - 100;
+  const years = [];
+  for (let year = maxYear; year >= minYear; year -= 1) years.push(year);
+  return years;
+}
+
+export function isBirthMonthDisabled(year, monthIndex, minAge = MIN_SIGNUP_AGE) {
+  const firstOfMonth = toISODate(new Date(year, monthIndex, 1));
+  const lastOfMonth = toISODate(new Date(year, monthIndex, daysInMonth(year, monthIndex)));
+  const minDate = minBirthDateISO();
+  const maxDate = maxBirthDateISO(minAge);
+  if (compareISO(lastOfMonth, minDate) < 0) return true;
+  if (compareISO(firstOfMonth, maxDate) > 0) return true;
+  return false;
+}
+
+export function isBirthDayDisabled(year, monthIndex, day, minAge = MIN_SIGNUP_AGE) {
+  const iso = toISODate(new Date(year, monthIndex, day));
+  return isDateDisabled(iso, minBirthDateISO(), maxBirthDateISO(minAge));
+}
+
+export function defaultBirthMonthISO() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 25);
+  return toISODate(date).slice(0, 7);
+}
+
 export function canNavigateToPrevMonth(viewMonth, minMonth = minBookableMonthISO()) {
   return compareISO(`${viewMonth}-01`, `${minMonth}-01`) > 0;
 }

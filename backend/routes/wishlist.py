@@ -18,21 +18,31 @@ async def toggle_wishlist(room_id: str, user: dict = Depends(get_current_user)):
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    wishlist = list(user.get("wishlist", []))
-    if room_id in wishlist:
-        wishlist = [rid for rid in wishlist if rid != room_id]
+    current = list(user.get("wishlist") or [])
+    if room_id in current:
         await database.collection("users").update_one(
             {"_id": user["_id"]},
-            {"$set": {"wishlist": wishlist}},
+            {"$pull": {"wishlist": room_id}},
         )
-        return {"message": "Removed from wishlist", "wishlist": wishlist, "wishlisted": False, "added": False}
+        wishlist = [rid for rid in current if rid != room_id]
+        return {
+            "message": "Removed from wishlist",
+            "wishlisted": False,
+            "added": False,
+            "wishlist": wishlist,
+        }
 
-    wishlist = list(dict.fromkeys([*wishlist, room_id]))
     await database.collection("users").update_one(
         {"_id": user["_id"]},
-        {"$set": {"wishlist": wishlist}},
+        {"$addToSet": {"wishlist": room_id}},
     )
-    return {"message": "Added to wishlist", "wishlist": wishlist, "wishlisted": True, "added": True}
+    wishlist = list(dict.fromkeys([*current, room_id]))
+    return {
+        "message": "Added to wishlist",
+        "wishlisted": True,
+        "added": True,
+        "wishlist": wishlist,
+    }
 
 
 @router.get("")

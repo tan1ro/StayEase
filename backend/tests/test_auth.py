@@ -98,3 +98,20 @@ async def test_identity_validation_pan_format(client, guest_token):
         data={"id_type": "pan", "id_number": "INVALID"},
     )
     assert res.status_code == 422
+
+
+async def test_become_host_upgrades_tourist(client, guest_token):
+    res = await client.post(
+        "/api/auth/become-host",
+        headers={"Authorization": f"Bearer {guest_token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["user"]["role"] == "host"
+    assert "access_token" in data
+
+    me = await client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+    assert me.json()["role"] == "host"

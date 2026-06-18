@@ -10,7 +10,7 @@ import { roomsApi } from '../api/api';
 import { findAmenityCategory, sortAmenityCategories } from '../constants/amenities';
 import { Icon, ICON } from './ui/Icon';
 
-export function AllReviewsModal({ open, onClose, reviews, roomTitle, avgRating }) {
+export function AllReviewsModal({ open, onClose, reviews, roomTitle, avgRating, onWriteReview }) {
   return (
     <Modal open={open} onClose={onClose} title={`Reviews · ${roomTitle}`} size="lg">
       {avgRating > 0 && (
@@ -23,6 +23,13 @@ export function AllReviewsModal({ open, onClose, reviews, roomTitle, avgRating }
           <ReviewCard key={review._id} review={review} />
         ))}
       </div>
+      {onWriteReview && (
+        <div className="listing-modal__actions">
+          <button type="button" className="btn btn-primary" onClick={onWriteReview}>
+            Write a review
+          </button>
+        </div>
+      )}
     </Modal>
   );
 }

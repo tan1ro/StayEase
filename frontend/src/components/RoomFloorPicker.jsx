@@ -10,9 +10,16 @@ import {
 import RoomPlacementInfo from './RoomPlacementInfo';
 import Spinner from './Spinner';
 
-function RoomTile({ room, isSelected, checkIn, checkOut }) {
+function viewIcon(viewType) {
+  if (viewType === 'beach_view' || viewType === 'sea_view') return Waves;
+  if (viewType === 'hill_view') return Mountain;
+  return Eye;
+}
+
+function RoomTile({ room, isSelected, checkIn, checkOut, onSelectRoom }) {
   const { sunrise, sunset } = getSunlightTraits(room.facing_side);
   const view = formatViewType(room.view_type);
+  const ViewIcon = viewIcon(room.view_type);
   const isBooked = room.available_for_dates === false;
   const query = new URLSearchParams({ check_in: checkIn, check_out: checkOut });
 
@@ -26,14 +33,27 @@ function RoomTile({ room, isSelected, checkIn, checkOut }) {
   const content = (
     <>
       <span className="room-floor-picker__tile-number">{room.room_number}</span>
-      <span className="room-floor-picker__tile-price">{formatCurrency(room.price_per_night)}</span>
-      {(sunrise || sunset) && (
+      <span className="room-floor-picker__tile-price">{formatCurrency(room.price_per_night)}/nt</span>
+      {(sunrise || sunset) ? (
         <span className="room-floor-picker__tile-light">
-          {sunrise && <Sunrise size={14} aria-hidden />}
-          {sunset && <Sunset size={14} aria-hidden />}
+          {sunrise && <Sunrise size={14} aria-hidden title="Sunrise side" />}
+          {sunset && <Sunset size={14} aria-hidden title="Sunset side" />}
         </span>
+      ) : (
+        <span className="room-floor-picker__tile-light room-floor-picker__tile-light--empty" aria-hidden="true" />
       )}
-      {view && <span className="room-floor-picker__tile-view">{view}</span>}
+      <span className="room-floor-picker__tile-view">
+        {view ? (
+          <>
+            <ViewIcon size={12} aria-hidden />
+            <span className="room-floor-picker__tile-view-text">{view}</span>
+          </>
+        ) : (
+          <span className="room-floor-picker__tile-view-text room-floor-picker__tile-view-text--empty" aria-hidden="true">
+            &nbsp;
+          </span>
+        )}
+      </span>
     </>
   );
 
@@ -57,6 +77,19 @@ function RoomTile({ room, isSelected, checkIn, checkOut }) {
     );
   }
 
+  if (onSelectRoom) {
+    return (
+      <button
+        type="button"
+        className={tileClass}
+        onClick={() => onSelectRoom(room._id)}
+        title={`Select room ${room.room_number} — ${view || 'standard view'}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
   return (
     <Link
       to={`/book/${room._id}?${query.toString()}`}
@@ -73,6 +106,7 @@ export default function RoomFloorPicker({
   currentRoom,
   checkIn,
   checkOut,
+  onSelectRoom,
 }) {
   const [propertyRooms, setPropertyRooms] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +145,10 @@ export default function RoomFloorPicker({
   );
 
   const floorGroups = useMemo(() => groupRoomsByFloor(allRooms), [allRooms]);
+  const maxRoomsPerFloor = useMemo(
+    () => Math.max(1, ...floorGroups.map(({ rooms }) => rooms.length)),
+    [floorGroups],
+  );
   const hasMultipleRooms = allRooms.length > 1;
 
   if (!checkIn || !checkOut) {
@@ -164,7 +202,10 @@ export default function RoomFloorPicker({
               <span className="room-floor-picker__floor-num">{floor <= 0 ? 'G' : floor}</span>
               <span className="room-floor-picker__floor-label">{label}</span>
             </div>
-            <div className="room-floor-picker__tiles">
+            <div
+              className="room-floor-picker__tiles"
+              style={{ '--tile-columns': maxRoomsPerFloor }}
+            >
               {rooms.map((room) => (
                 <RoomTile
                   key={room._id}
@@ -172,6 +213,7 @@ export default function RoomFloorPicker({
                   isSelected={room._id === roomId}
                   checkIn={checkIn}
                   checkOut={checkOut}
+                  onSelectRoom={onSelectRoom}
                 />
               ))}
             </div>
@@ -201,6 +243,8 @@ export default function RoomFloorPicker({
           Sunset side
         </li>
       </ul>
+
+      <RoomPlacementInfo room={selectedRoom} compact title="Selected room details" />
     </section>
   );
 }

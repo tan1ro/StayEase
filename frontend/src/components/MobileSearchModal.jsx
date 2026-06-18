@@ -40,7 +40,7 @@ export default function MobileSearchModal({ open, onClose }) {
   if (!open) return null;
 
   const whereSummary =
-    locationMode === 'nearby' ? 'Nearby' : where || 'Search destinations';
+    locationMode === 'nearby' ? (where || 'Nearby') : where || 'Search destinations';
   const whenSummary = formatRangeLabel(checkIn, checkOut);
   const whoSummary = `${guests} guest${guests !== 1 ? 's' : ''}`;
 
@@ -76,7 +76,7 @@ export default function MobileSearchModal({ open, onClose }) {
 
   const handleLocationSelect = (selection) => {
     if (selection.type === 'nearby') {
-      setWhere('Nearby');
+      setWhere(selection.label || 'Nearby');
       setLocationMode('nearby');
       setCoords({ lat: selection.lat, lng: selection.lng });
       setActiveSection('when');

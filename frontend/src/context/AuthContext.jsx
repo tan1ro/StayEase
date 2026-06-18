@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { authApi, setToken, getToken, setStoredUser, clearAuthStorage } from '../api/api';
+import { authApi, setToken, getToken } from '../api/api';
 import { canAccessHostPortal, isHostRole, isTouristRole, normalizeRole } from '../utils/roles';
 
 const AuthContext = createContext(null);
@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
       setUser({ ...data, role: normalizeRole(data.role) });
       return data;
     } catch {
-      clearAuthStorage();
+      setToken(null);
       setUser(null);
       return null;
     } finally {
@@ -34,8 +34,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const handler = () => {
-      clearAuthStorage();
       setUser(null);
+      setToken(null);
     };
     window.addEventListener('stayease:unauthorized', handler);
     return () => window.removeEventListener('stayease:unauthorized', handler);
@@ -45,7 +45,6 @@ export function AuthProvider({ children }) {
     const { data } = await authApi.login({ email, password });
     setToken(data.access_token);
     const normalizedUser = { ...data.user, role: normalizeRole(data.user.role) };
-    setStoredUser(normalizedUser);
     setUser(normalizedUser);
     return normalizedUser;
   };
@@ -54,13 +53,12 @@ export function AuthProvider({ children }) {
     const { data } = await authApi.register(payload);
     setToken(data.access_token);
     const normalizedUser = { ...data.user, role: normalizeRole(data.user.role) };
-    setStoredUser(normalizedUser);
     setUser(normalizedUser);
     return normalizedUser;
   };
 
   const logout = () => {
-    clearAuthStorage();
+    setToken(null);
     setUser(null);
   };
 
@@ -68,6 +66,14 @@ export function AuthProvider({ children }) {
     setLoading(true);
     return fetchUser();
   };
+
+  const becomeHost = useCallback(async () => {
+    const { data } = await authApi.becomeHost();
+    if (data.access_token) setToken(data.access_token);
+    const normalizedUser = { ...data.user, role: normalizeRole(data.user.role) };
+    setUser(normalizedUser);
+    return normalizedUser;
+  }, []);
 
   const role = normalizeRole(user?.role);
 
@@ -84,9 +90,10 @@ export function AuthProvider({ children }) {
       register,
       logout,
       refreshUser,
+      becomeHost,
       setUser,
     }),
-    [user, loading, role, fetchUser],
+    [user, loading, role, fetchUser, becomeHost],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

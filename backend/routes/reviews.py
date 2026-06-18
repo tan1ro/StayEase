@@ -4,11 +4,10 @@ from datetime import date
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
-from database import database, get_database
+from database import database
 from models.common import serialize_doc, utc_now
 from models.review import ReviewCreate
 from services.auth import get_current_user, require_role
@@ -20,11 +19,11 @@ from services.roles import can_book_stays
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
 
 
-async def _room_map(db: AsyncIOMotorDatabase, room_ids: list[str]) -> dict[str, dict]:
+async def _room_map(room_ids: list[str]) -> dict[str, dict]:
     valid = [ObjectId(rid) for rid in room_ids if ObjectId.is_valid(rid)]
     if not valid:
         return {}
-    rooms = await db["rooms"].find({"_id": {"$in": valid}}).to_list(len(valid))
+    rooms = await database.collection("rooms").find({"_id": {"$in": valid}}).to_list(len(valid))
     return {str(room["_id"]): room for room in rooms}
 
 
@@ -36,13 +35,13 @@ def _enrich_review(review: dict, rooms_by_id: dict[str, dict]) -> dict:
     return doc
 
 
-async def _eligible_booking_for_property(*, db: AsyncIOMotorDatabase, guest_id: str, room: dict) -> dict:
+async def _eligible_booking_for_property(*, guest_id: str, room: dict) -> dict:
     property_name = property_name_from_room(room)
     room_ids = await get_property_room_ids(room, database=database)
-    rooms_by_id = await _room_map(db, room_ids)
+    rooms_by_id = await _room_map(room_ids)
 
     bookings = (
-        await db["bookings"]
+        await database.collection("bookings")
         .find({"guest_id": guest_id, "room_id": {"$in": room_ids}, "status": {"$ne": "cancelled"}})
         .sort("check_out_date", -1)
         .to_list(50)
@@ -58,7 +57,7 @@ async def _eligible_booking_for_property(*, db: AsyncIOMotorDatabase, guest_id: 
 
     booking_ids = [str(booking["_id"]) for booking in bookings]
     existing_reviews = (
-        await db["reviews"]
+        await database.collection("reviews")
         .find({"booking_id": {"$in": booking_ids}})
         .to_list(len(booking_ids))
     )
@@ -124,14 +123,10 @@ async def _eligible_booking_for_property(*, db: AsyncIOMotorDatabase, guest_id: 
 
 
 @router.post("", status_code=201)
-async def create_review(
-    payload: ReviewCreate,
-    user: dict = Depends(require_role("tourist", "host", "admin")),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def create_review(payload: ReviewCreate, user: dict = Depends(require_role("tourist", "host", "admin"))):
     if not ObjectId.is_valid(payload.booking_id):
         raise HTTPException(status_code=404, detail="Booking not found")
-    booking = await db["bookings"].find_one({"_id": ObjectId(payload.booking_id)})
+    booking = await database.collection("bookings").find_one({"_id": ObjectId(payload.booking_id)})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking["guest_id"] != str(user["_id"]) and user["role"] != "admin":
@@ -139,7 +134,7 @@ async def create_review(
     if not is_booking_reviewable(booking):
         raise HTTPException(status_code=422, detail="Can only review stays after checkout")
 
-    existing = await db["reviews"].find_one({"booking_id": payload.booking_id})
+    existing = await database.collection("reviews").find_one({"booking_id": payload.booking_id})
     if existing:
         raise HTTPException(status_code=409, detail="Review already submitted")
 
@@ -159,7 +154,7 @@ async def create_review(
 
     async def _review_txn(session):
         try:
-            res = await db["reviews"].insert_one(doc, session=session)
+            res = await database.collection("reviews").insert_one(doc, session=session)
         except DuplicateKeyError as exc:
             raise HTTPException(status_code=409, detail="Review already submitted") from exc
         await sync_room_review_stats(booking["room_id"], session=session)
@@ -170,43 +165,39 @@ async def create_review(
     except HTTPException:
         raise
 
-    created = await db["reviews"].find_one({"_id": inserted_id})
+    created = await database.collection("reviews").find_one({"_id": inserted_id})
     return serialize_doc(created)
 
 
 @router.get("/eligible/room/{room_id}")
-async def get_eligible_review_for_room(
-    room_id: str,
-    user: dict = Depends(get_current_user),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def get_eligible_review_for_room(room_id: str, user: dict = Depends(get_current_user)):
     if not can_book_stays(user.get("role")):
         raise HTTPException(status_code=403, detail="Forbidden")
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
-    room = await db["rooms"].find_one({"_id": ObjectId(room_id)})
+    room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    return await _eligible_booking_for_property(db=db, guest_id=str(user["_id"]), room=room)
+    return await _eligible_booking_for_property(guest_id=str(user["_id"]), room=room)
 
 
 @router.get("/property/{room_id}")
-async def get_property_reviews(room_id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+async def get_property_reviews(room_id: str):
     if not ObjectId.is_valid(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
-    room = await db["rooms"].find_one({"_id": ObjectId(room_id)})
+    room = await database.collection("rooms").find_one({"_id": ObjectId(room_id)})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
     property_name = property_name_from_room(room)
     room_ids = await get_property_room_ids(room, database=database)
     items = (
-        await db["reviews"]
+        await database.collection("reviews")
         .find({"room_id": {"$in": room_ids}})
         .sort("created_at", -1)
         .to_list(300)
     )
-    rooms_by_id = await _room_map(db, room_ids)
+    rooms_by_id = await _room_map(room_ids)
     reviews = [_enrich_review(item, rooms_by_id) for item in items]
     avg_rating = round(sum(r["rating"] for r in reviews) / len(reviews), 2) if reviews else 0.0
 
@@ -219,29 +210,25 @@ async def get_property_reviews(room_id: str, db: AsyncIOMotorDatabase = Depends(
 
 
 @router.get("/room/{id}")
-async def get_room_reviews(id: str, db: AsyncIOMotorDatabase = Depends(get_database)):
+async def get_room_reviews(id: str):
     items = (
-        await db["reviews"].find({"room_id": id}).sort("created_at", -1).to_list(200)
+        await database.collection("reviews").find({"room_id": id}).sort("created_at", -1).to_list(200)
     )
-    rooms_by_id = await _room_map(db, [id])
+    rooms_by_id = await _room_map([id])
     return [_enrich_review(item, rooms_by_id) for item in items]
 
 
 @router.get("/booking/{booking_id}")
-async def get_booking_review(
-    booking_id: str,
-    user: dict = Depends(get_current_user),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def get_booking_review(booking_id: str, user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(booking_id):
         raise HTTPException(status_code=404, detail="Review not found")
-    booking = await db["bookings"].find_one({"_id": ObjectId(booking_id)})
+    booking = await database.collection("bookings").find_one({"_id": ObjectId(booking_id)})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking["guest_id"] != str(user["_id"]) and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    review = await db["reviews"].find_one({"booking_id": booking_id})
+    review = await database.collection("reviews").find_one({"booking_id": booking_id})
     return {
         "can_review": is_booking_reviewable(booking) and review is None,
         "has_review": review is not None,
@@ -254,22 +241,17 @@ class HostResponse(BaseModel):
 
 
 @router.patch("/{id}/host-response")
-async def host_respond(
-    id: str,
-    payload: HostResponse,
-    user: dict = Depends(require_role("host", "admin")),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
+async def host_respond(id: str, payload: HostResponse, user: dict = Depends(require_role("host", "admin"))):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Review not found")
-    review = await db["reviews"].find_one({"_id": ObjectId(id)})
+    review = await database.collection("reviews").find_one({"_id": ObjectId(id)})
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    room = await db["rooms"].find_one({"_id": ObjectId(review["room_id"])})
+    room = await database.collection("rooms").find_one({"_id": ObjectId(review["room_id"])})
     if user["role"] != "admin" and room["host_id"] != str(user["_id"]):
         raise HTTPException(status_code=403, detail="Forbidden")
-    await db["reviews"].update_one(
+    await database.collection("reviews").update_one(
         {"_id": ObjectId(id)}, {"$set": {"host_response": payload.response}}
     )
-    updated = await db["reviews"].find_one({"_id": ObjectId(id)})
+    updated = await database.collection("reviews").find_one({"_id": ObjectId(id)})
     return serialize_doc(updated)

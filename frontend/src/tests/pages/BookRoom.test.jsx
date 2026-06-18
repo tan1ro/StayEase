@@ -53,6 +53,8 @@ vi.mock('../../api/api', async () => {
 const mockRoom = {
   _id: 'room1',
   title: 'Test Room',
+  room_number: '101',
+  facing_side: 'east',
   food_preference: 'veg',
   smoking_policy: 'non_smoking',
   alcohol_policy: 'non_alcohol',
@@ -60,6 +62,7 @@ const mockRoom = {
   has_balcony: true,
   room_category: 'Double',
   max_guests: 2,
+  price_per_night: 1200,
 };
 
 const mockPricing = {
@@ -94,7 +97,7 @@ describe('BookRoom', () => {
     );
     await waitFor(() => {
       expect(screen.getByText('Test Room')).toBeInTheDocument();
-      expect(screen.getByText('Guest details')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /1\. Dates & guests/i })).toBeInTheDocument();
     });
   });
 

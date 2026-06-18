@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import CategoryStrip from '../../components/CategoryStrip';
+import FilterBar from '../../components/FilterBar';
 import { ROOM_CATEGORIES } from '../../constants/roomCategories';
 
 function renderStrip(initial = '/') {
   return render(
     <MemoryRouter initialEntries={[initial]}>
-      <CategoryStrip />
+      <FilterBar />
     </MemoryRouter>,
   );
 }

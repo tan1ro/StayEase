@@ -1,3 +1,5 @@
+import { DEFAULT_PHONE_COUNTRY, getPhoneCountry, PHONE_COUNTRIES } from '../constants/countryCodes';
+
 const ID_HINTS = {
   aadhar: '12-digit Aadhar number',
   pan: 'Format: AAAAA9999A',
@@ -65,17 +67,74 @@ export function validateIdNumber(type, value = '') {
   return { valid: true, message: '', value: normalized };
 }
 
-export function validateIndianPhone(phone = '', { required = false } = {}) {
-  const digits = phone.replace(/\D/g, '');
+export function formatPhoneNationalDisplay(national = '', countryCode = DEFAULT_PHONE_COUNTRY) {
+  const digits = national.replace(/\D/g, '');
+  if (!digits) return '';
+  const country = getPhoneCountry(countryCode);
+  if (country.code === 'IN' && digits.length <= 10) {
+    const parts = [digits.slice(0, 5), digits.slice(5, 10)].filter(Boolean);
+    return parts.join(' ');
+  }
+  if (digits.length <= 6) return digits;
+  return `${digits.slice(0, Math.ceil(digits.length / 2))} ${digits.slice(Math.ceil(digits.length / 2))}`;
+}
+
+export function normalizePhoneNational(national = '', countryCode = DEFAULT_PHONE_COUNTRY) {
+  const country = getPhoneCountry(countryCode);
+  return national.replace(/\D/g, '').slice(0, country.maxLength);
+}
+
+export function validatePhone(national = '', countryCode = DEFAULT_PHONE_COUNTRY, { required = false } = {}) {
+  const country = getPhoneCountry(countryCode);
+  const digits = normalizePhoneNational(national, countryCode);
+
   if (!digits) {
     return required
-      ? { valid: false, message: 'Enter a 10-digit mobile number', value: '' }
-      : { valid: true, message: '', value: '' };
+      ? { valid: false, message: `Enter your ${country.name} mobile number`, value: '', apiValue: '' }
+      : { valid: true, message: '', value: '', apiValue: '' };
   }
-  if (!/^\d{10}$/.test(digits)) {
-    return { valid: false, message: 'Enter a valid 10-digit mobile number', value: digits };
+
+  if (digits === '0000000000') {
+    return { valid: false, message: 'Enter a valid phone number', value: digits, apiValue: '' };
   }
-  return { valid: true, message: '', value: digits };
+
+  if (!country.pattern.test(digits)) {
+    return { valid: false, message: country.errorMessage, value: digits, apiValue: '' };
+  }
+
+  const apiValue = country.code === 'IN' ? digits : `${country.dialDigits}${digits}`;
+  return { valid: true, message: '', value: digits, apiValue };
+}
+
+export function parseStoredPhone(stored = '') {
+  const digits = String(stored || '').replace(/\D/g, '');
+  if (!digits) return { countryCode: DEFAULT_PHONE_COUNTRY, national: '' };
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return { countryCode: 'IN', national: digits };
+  }
+
+  const sorted = PHONE_COUNTRIES
+    .filter((c) => c.code !== 'IN')
+    .sort((a, b) => b.dialDigits.length - a.dialDigits.length);
+
+  for (const country of sorted) {
+    if (digits.startsWith(country.dialDigits)) {
+      const national = digits.slice(country.dialDigits.length);
+      if (national.length >= country.minLength && national.length <= country.maxLength) {
+        return { countryCode: country.code, national };
+      }
+    }
+  }
+
+  if (digits.length === 10) {
+    return { countryCode: DEFAULT_PHONE_COUNTRY, national: digits };
+  }
+
+  return { countryCode: DEFAULT_PHONE_COUNTRY, national: digits.slice(-10) };
+}
+
+export function validateIndianPhone(phone = '', { required = false } = {}) {
+  return validatePhone(phone, DEFAULT_PHONE_COUNTRY, { required });
 }
 
 export function validateVerificationImage(

@@ -1,7 +1,5 @@
-import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MessageCircle, Send } from 'lucide-react';
-import { inquiriesApi } from '../api/api';
+import { Calendar, MessageCircle } from 'lucide-react';
 import { Icon, ICON } from './ui/Icon';
 
 function formatWhen(iso) {
@@ -19,109 +17,12 @@ function formatWhen(iso) {
   }
 }
 
-function buildConversation(inquiry) {
-  const original = {
-    sender_role: 'guest',
-    sender_name: inquiry.guest_name || 'Guest',
-    message: inquiry.message,
-    created_at: inquiry.created_at,
-  };
-  const replies = (inquiry.replies || []).map((reply) => ({ ...reply }));
-  return [...[original], ...replies].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
-}
-
-function ConversationThread({ inquiry, scope }) {
-  const messages = useMemo(() => buildConversation(inquiry), [inquiry]);
-
-  return (
-    <div className="inquiry-thread" role="log" aria-label="Conversation">
-      {messages.map((msg, index) => {
-        const isGuest = msg.sender_role === 'guest';
-        const isOwn = scope === 'sent' ? isGuest : !isGuest;
-        const label = isGuest
-          ? (scope === 'sent' && isOwn ? 'You' : msg.sender_name || 'Guest')
-          : (scope === 'received' && isOwn ? 'You' : msg.sender_name || 'Host');
-
-        return (
-          <div
-            key={`${msg.created_at}-${index}`}
-            className={`inquiry-thread__item inquiry-thread__item--${isGuest ? 'guest' : 'host'}${isOwn ? ' inquiry-thread__item--own' : ''}`}
-          >
-            <div className="inquiry-thread__meta">
-              <strong>{label}</strong>
-              <time dateTime={msg.created_at}>{formatWhen(msg.created_at)}</time>
-            </div>
-            <p>{msg.message}</p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function InquiryReplyForm({ inquiryId, scope, onSent }) {
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const isGuestView = scope === 'sent';
-  const label = isGuestView ? 'Your message' : 'Your reply';
-  const placeholder = isGuestView
-    ? 'Ask a follow-up question or share more details for the host…'
-    : 'Thanks for reaching out! Here is what you need to know…';
-  const buttonLabel = isGuestView ? 'Send message' : 'Send reply';
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const trimmed = message.trim();
-    if (trimmed.length < 1) {
-      setError('Write a message before sending');
-      return;
-    }
-    setSending(true);
-    setError('');
-    try {
-      await inquiriesApi.reply(inquiryId, { message: trimmed });
-      setMessage('');
-      onSent?.();
-    } catch (err) {
-      setError(err.normalized?.message || 'Could not send message');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <form className="inquiry-reply-form" onSubmit={handleSubmit}>
-      <label className="label" htmlFor={`reply-${inquiryId}`}>{label}</label>
-      <textarea
-        id={`reply-${inquiryId}`}
-        className="textarea inquiry-reply-form__input"
-        rows={3}
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        placeholder={placeholder}
-        maxLength={1000}
-        disabled={sending}
-      />
-      {error && <p className="form-error">{error}</p>}
-      <button type="submit" className="btn btn-primary btn-sm inquiry-reply-form__send" disabled={sending}>
-        <Icon icon={Send} size={ICON.sm} />
-        {sending ? 'Sending…' : buttonLabel}
-      </button>
-    </form>
-  );
-}
-
 export default function InquiryInbox({
   inquiries,
   scope,
   loading,
   error,
   onRetry,
-  onReplied,
 }) {
   if (loading) return null;
 
@@ -142,11 +43,11 @@ export default function InquiryInbox({
     return (
       <div className="empty-state empty-state--fill">
         <Icon icon={MessageCircle} size={ICON.xl} />
-        <p>{scope === 'received' ? 'No guest messages yet.' : 'No conversations yet.'}</p>
+        <p>{scope === 'received' ? 'No guest messages yet.' : 'No messages yet.'}</p>
         <p className="inquiry-inbox__empty-hint">
           {scope === 'received'
             ? 'When guests message you from a listing, their inquiries appear here.'
-            : 'Message a host from any listing page to start a conversation before you book.'}
+            : 'Message a host from any listing page before you book.'}
         </p>
         {scope === 'sent' && (
           <Link to="/" className="btn btn-primary">Browse stays</Link>
@@ -172,13 +73,13 @@ export default function InquiryInbox({
                 {scope === 'received' ? (
                   <>From <strong>{item.guest_name || 'Guest'}</strong></>
                 ) : (
-                  <>With <strong>{item.host_name || 'Host'}</strong></>
+                  <>To <strong>{item.host_name || 'Host'}</strong></>
                 )}
                 {item.room_city ? ` · ${item.room_city}` : ''}
               </p>
             </div>
             <time className="inquiry-card__time" dateTime={item.created_at}>
-              Started {formatWhen(item.created_at)}
+              {formatWhen(item.created_at)}
             </time>
           </div>
 
@@ -189,27 +90,18 @@ export default function InquiryInbox({
             </p>
           )}
 
-          <ConversationThread inquiry={item} scope={scope} />
+          <p className="inquiry-card__message">{item.message}</p>
 
-          <InquiryReplyForm inquiryId={item._id} scope={scope} onSent={onReplied} />
+          {scope === 'received' && item.guest_email && (
+            <p className="inquiry-card__contact">
+              Reply via email: <a href={`mailto:${item.guest_email}`}>{item.guest_email}</a>
+            </p>
+          )}
 
           <div className="inquiry-card__actions">
             <Link to={`/rooms/${item.room_id}`} className="btn btn-outline btn-sm">
               View listing
             </Link>
-            {scope === 'sent' && item.room_id && (
-              <Link
-                to={`/book/${item.room_id}${item.check_in ? `?check_in=${item.check_in}&check_out=${item.check_out || ''}` : ''}`}
-                className="btn btn-primary btn-sm"
-              >
-                Book this room
-              </Link>
-            )}
-            {scope === 'received' && item.guest_email && (
-              <a href={`mailto:${item.guest_email}`} className="btn btn-ghost btn-sm">
-                Email guest
-              </a>
-            )}
           </div>
         </article>
       ))}

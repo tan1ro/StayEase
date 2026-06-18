@@ -16,15 +16,21 @@ export default function DatePicker({
   min,
   max,
   maxMonthsAhead,
+  minMonth,
+  maxMonth,
+  defaultMonth,
   className = '',
   variant = 'input',
   required = false,
+  invalid = false,
 }) {
   const autoId = useId();
   const fieldId = id || autoId;
   const rootRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState((value || min || todayISO()).slice(0, 7));
+  const [month, setMonth] = useState(
+    () => (value || defaultMonth || min || todayISO()).slice(0, 7),
+  );
 
   useEffect(() => {
     if (value) setMonth(value.slice(0, 7));
@@ -60,6 +66,7 @@ export default function DatePicker({
     `date-picker__trigger--${variant}`,
     open && 'date-picker__trigger--open',
     !value && 'date-picker__trigger--placeholder',
+    invalid && 'date-picker__trigger--error',
     className,
   ].filter(Boolean).join(' ');
 
@@ -78,6 +85,7 @@ export default function DatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-required={required}
+        aria-invalid={invalid || undefined}
       >
         <CalendarIcon size={variant === 'input' ? 18 : 16} className="date-picker__icon" aria-hidden />
         <span className="date-picker__value">{display}</span>
@@ -92,6 +100,8 @@ export default function DatePicker({
             onDateClick={handleSelect}
             minDate={minDate}
             maxDate={maxDate}
+            minMonth={minMonth}
+            maxMonth={maxMonth}
             monthsToShow={1}
           />
         </div>

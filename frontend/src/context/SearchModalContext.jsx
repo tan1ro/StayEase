@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import MobileSearchModal from './MobileSearchModal';
+import MobileSearchModal from '../components/MobileSearchModal';
 
 const SearchModalContext = createContext(null);
 

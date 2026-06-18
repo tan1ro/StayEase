@@ -1,17 +1,9 @@
 export const HOTEL_GST_SLABS = [
   {
-    id: 'below-1000',
-    tariffLabel: 'Below ₹1,000',
-    rate: 0,
-    rateLabel: '0%',
-    itcLabel: 'Not Applicable',
-    itcAllowed: false,
-  },
-  {
-    id: '1000-to-7500',
-    tariffLabel: '₹1,000 – ₹7,500',
-    rate: 0.12,
-    rateLabel: '12%',
+    id: 'upto-7500',
+    tariffLabel: 'Up to ₹7,500',
+    rate: 0.05,
+    rateLabel: '5%',
     itcLabel: 'Not Allowed',
     itcAllowed: false,
   },
@@ -27,16 +19,13 @@ export const HOTEL_GST_SLABS = [
 
 export function getHotelGstRate(pricePerNight) {
   const price = Number(pricePerNight) || 0;
-  if (price < 1000) return 0;
-  if (price <= 7500) return 0.12;
-  return 0.18;
+  if (price <= 0) return 0;
+  return price > 7500 ? 0.18 : 0.05;
 }
 
 export function getHotelGstSlabForPrice(pricePerNight) {
   const price = Number(pricePerNight) || 0;
-  if (price < 1000) return HOTEL_GST_SLABS[0];
-  if (price <= 7500) return HOTEL_GST_SLABS[1];
-  return HOTEL_GST_SLABS[2];
+  return price > 7500 ? HOTEL_GST_SLABS[1] : HOTEL_GST_SLABS[0];
 }
 
 export function hotelGstSlabSummary(pricePerNight) {

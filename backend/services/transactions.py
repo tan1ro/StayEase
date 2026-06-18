@@ -55,7 +55,6 @@ async def commit_room_inquiry(
         "message": message,
         "check_in": check_in,
         "check_out": check_out,
-        "replies": [],
         "created_at": utc_now(),
     }
 
@@ -79,62 +78,6 @@ async def commit_room_inquiry(
         if created is None:
             raise RuntimeError("Inquiry insert failed")
         return created
-
-    return await database.run_transaction(_txn)
-
-
-async def commit_inquiry_reply(
-    *,
-    inquiry_id: str,
-    sender_id: str,
-    sender_role: str,
-    sender_name: str,
-    message: str,
-    guest_id: str,
-    host_id: str | None,
-    room_id: str,
-) -> dict[str, Any]:
-    if not ObjectId.is_valid(inquiry_id):
-        raise HTTPException(status_code=404, detail="Inquiry not found")
-
-    reply = {
-        "sender_id": sender_id,
-        "sender_role": sender_role,
-        "sender_name": sender_name,
-        "message": message,
-        "created_at": utc_now(),
-    }
-
-    async def _txn(session) -> dict[str, Any]:
-        result = await database.collection("inquiries").update_one(
-            {"_id": ObjectId(inquiry_id)},
-            {"$push": {"replies": reply}},
-            session=session,
-        )
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Inquiry not found")
-
-        notify_user_id = guest_id if sender_role == "host" else host_id
-        if notify_user_id:
-            title = f"Reply from {sender_name}" if sender_role == "host" else f"Message from {sender_name}"
-            await database.collection("notifications").insert_one(
-                {
-                    "user_id": notify_user_id,
-                    "type": "inquiry_reply",
-                    "title": title,
-                    "body": message[:200],
-                    "channel": "in_app",
-                    "sent_at": utc_now(),
-                    "read": False,
-                    "meta": {"room_id": room_id, "inquiry_id": inquiry_id},
-                },
-                session=session,
-            )
-
-        updated = await database.collection("inquiries").find_one({"_id": ObjectId(inquiry_id)}, session=session)
-        if updated is None:
-            raise RuntimeError("Inquiry reply failed")
-        return updated
 
     return await database.run_transaction(_txn)
 

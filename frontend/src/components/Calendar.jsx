@@ -107,6 +107,8 @@ export default function Calendar({
   monthsToShow = 2,
   hoverDate,
   onDateHover,
+  minMonth,
+  maxMonth,
 }) {
   const view = parseISODate(`${month}-01`) || new Date();
   const year = view.getFullYear();
@@ -130,10 +132,10 @@ export default function Calendar({
     months.push({ year: d.getFullYear(), month: d.getMonth() });
   }
 
-  const minMonth = minBookableMonthISO();
-  const maxMonth = maxBookableMonthISO();
-  const canPrev = canNavigateToPrevMonth(month, minMonth);
-  const canNext = canNavigateToNextMonth(month, monthsToShow, maxMonth);
+  const navMinMonth = minMonth ?? minBookableMonthISO();
+  const navMaxMonth = maxMonth ?? maxBookableMonthISO();
+  const canPrev = canNavigateToPrevMonth(month, navMinMonth);
+  const canNext = canNavigateToNextMonth(month, monthsToShow, navMaxMonth);
 
   return (
     <div className="calendar">

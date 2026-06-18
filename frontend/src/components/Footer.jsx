@@ -24,7 +24,7 @@ const hostingLinks = [
   { to: '/host', label: 'Host dashboard' },
   { to: '/host/rooms', label: 'Manage rooms' },
   { to: '/host/bookings', label: 'Manage bookings' },
-  { to: '/host/analytics', label: 'Earnings & analytics' },
+  { to: '/host?tab=earnings', label: 'Earnings' },
   { to: '/host/payouts', label: 'Payouts' },
   { to: '/terms#host', label: 'Hosting responsibly' },
 ];

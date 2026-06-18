@@ -1,4 +1,13 @@
-import { Wallet } from 'lucide-react';
+import { Calendar, IndianRupee, Wallet } from 'lucide-react';
+import {
+  HostHero,
+  HostKpi,
+  HostKpiGrid,
+  HostList,
+  HostListItem,
+  HostPage,
+  HostPanel,
+} from '../../components/host/HostPageLayout';
 import { formatCurrency } from '../../api/api';
 
 const MOCK_PAYOUTS = [
@@ -12,30 +21,36 @@ export default function Payouts() {
   const pending = MOCK_PAYOUTS.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
 
   return (
-    <div>
-      <h1 className="page-title">Payouts</h1>
-      <div className="stat-cards">
-        <div className="stat-card card"><div className="stat-card__label">Total paid out</div><div className="stat-card__value">{formatCurrency(total)}</div></div>
-        <div className="stat-card card"><div className="stat-card__label">Pending</div><div className="stat-card__value">{formatCurrency(pending)}</div></div>
-        <div className="stat-card card"><div className="stat-card__label"><Wallet size={16} /> Next payout</div><div className="stat-card__value">Jun 15</div></div>
-      </div>
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr><th>Date</th><th>Amount</th><th>Method</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {MOCK_PAYOUTS.map((p) => (
-              <tr key={p.id}>
-                <td>{p.date}</td>
-                <td>{formatCurrency(p.amount)}</td>
-                <td>{p.method}</td>
-                <td>{p.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <HostPage>
+      <HostHero
+        title="Payouts"
+        subtitle="Track transfers to your bank or UPI after guest check-in."
+        pills={[`${formatCurrency(total)} paid`, `${formatCurrency(pending)} pending`]}
+      />
+
+      <HostKpiGrid>
+        <HostKpi icon={IndianRupee} variant="earnings" label="Total paid out" value={formatCurrency(total)} hint="All time" />
+        <HostKpi icon={Wallet} variant="bookings" label="Pending" value={formatCurrency(pending)} hint="Processing" />
+        <HostKpi icon={Calendar} variant="occupancy" label="Next payout" value="Jun 15" hint="Estimated date" />
+        <HostKpi icon={Wallet} variant="rating" label="Method" value="Bank" hint="Primary account" />
+      </HostKpiGrid>
+
+      <HostPanel title="Payout history" subtitle="Recent transfers to your account">
+        <HostList>
+          {MOCK_PAYOUTS.map((p) => (
+            <HostListItem
+              key={p.id}
+              title={formatCurrency(p.amount)}
+              meta={`${p.date} · ${p.method}`}
+              value={(
+                <span className={`host-badge host-badge--${p.status === 'paid' ? 'live' : 'pending'}`}>
+                  {p.status === 'paid' ? 'Paid' : 'Pending'}
+                </span>
+              )}
+            />
+          ))}
+        </HostList>
+      </HostPanel>
+    </HostPage>
   );
 }

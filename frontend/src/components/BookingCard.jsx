@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
-import AvailabilityCalendar from './AvailabilityCalendar';
 import CancellationPolicy from './CancellationPolicy';
 import DateRangePicker from './DateRangePicker';
 import { formatCurrency } from '../api/api';
@@ -20,7 +19,6 @@ export default function BookingCard({
   const [checkIn, setCheckIn] = useState(initialCheckIn);
   const [checkOut, setCheckOut] = useState(initialCheckOut);
   const [guests, setGuests] = useState(initialGuests);
-  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     setCheckIn(initialCheckIn);
@@ -85,11 +83,9 @@ export default function BookingCard({
               setCheckIn(start);
               setCheckOut(end);
             }}
-            onFocus={() => setShowCalendar(true)}
             startLabel="Check-in"
             endLabel="Checkout"
           />
-          <AvailabilityCalendar roomId={roomId} visible={showCalendar} />
           <label className="booking-widget__guests">
             <span className="booking-widget__label">Guests</span>
             <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">

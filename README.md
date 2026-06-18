@@ -113,7 +113,7 @@ npm run dev
 
 | Role | Email | Password |
 |------|-------|----------|
-| Guest | guest@stayease.com | demo123 |
+| Guest | guest@stayease.com | Demo@123 |
 | Host | host@stayease.com | demo123 |
 
 Run `python seed.py` in the backend folder to create these accounts along with 5 sample rooms, 2 bookings, and 2 offers.

@@ -39,8 +39,8 @@ const CANCELLATION_LABELS = {
 
 const VIEW_LABELS = {
   hill_view: { label: 'Hill View', icon: Mountain },
-  beach_view: { label: 'Beach View', icon: Waves },
-  sea_view: { label: 'Sea View', icon: Waves },
+  beach_view: { label: 'Beach & Sea View', icon: Waves },
+  sea_view: { label: 'Beach & Sea View', icon: Waves },
   garden_view: { label: 'Garden View', icon: TreePine },
   city_view: { label: 'City View', icon: Building2 },
   pool_view: { label: 'Pool View', icon: Waves },

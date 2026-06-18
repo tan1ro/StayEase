@@ -60,6 +60,12 @@ export function normalizeError(error) {
   let message = 'Something went wrong';
   const fields = {};
 
+  if (data?.errors && typeof data.errors === 'object' && !Array.isArray(data.errors)) {
+    Object.entries(data.errors).forEach(([key, val]) => {
+      fields[key] = Array.isArray(val) ? val.join(', ') : String(val);
+    });
+  }
+
   if (typeof data?.detail === 'string') {
     message = data.detail;
   } else if (typeof data?.detail === 'object' && data.detail !== null) {
@@ -117,6 +123,10 @@ export const authApi = {
     }),
   verifyEmail: (otp) => api.post('/api/auth/verify-email', { otp }),
   resendOtp: () => api.post('/api/auth/resend-otp'),
+  forgotPassword: (email) => api.post('/api/auth/forgot-password', { email }),
+  oauthGoogle: (data) => api.post('/api/auth/oauth/google', data),
+  completeProfile: (data) => api.patch('/api/auth/complete-profile', data),
+  becomeHost: () => api.post('/api/auth/become-host'),
 };
 
 export const roomsApi = {
@@ -198,11 +208,9 @@ export const offersApi = {
 };
 
 export const analyticsApi = {
-  occupancy: (params) => api.get('/api/analytics/occupancy', { params }),
-  revenue: (params) => api.get('/api/analytics/revenue', { params }),
   guestDashboard: () => api.get('/api/guest/dashboard'),
-  hostDashboard: () => api.get('/api/dashboard'),
-  dashboard: () => api.get('/api/dashboard'),
+  hostDashboard: (params) => api.get('/api/dashboard', { params }),
+  dashboard: (params) => api.get('/api/dashboard', { params }),
 };
 
 export const waitlistApi = {
@@ -230,6 +238,12 @@ export const notificationsApi = {
 export const inquiriesApi = {
   list: (params) => api.get('/api/inquiries', { params }),
   reply: (id, data) => api.post(`/api/inquiries/${id}/replies`, data),
+};
+
+export const chatApi = {
+  send: (data) => api.post('/api/chat/message', data, { skipAuthRedirect: true }),
+  history: (sessionId) =>
+    api.get('/api/chat/history', { params: { session_id: sessionId }, skipAuthRedirect: true }),
 };
 
 export const attractionsApi = {
@@ -284,8 +298,7 @@ export const fetchOffers = (params) => api.get('/api/offers', { params }).then((
 export const createOffer = (data) => api.post('/api/offers', data).then((r) => r.data);
 export const deleteOffer = (id) => api.delete(`/api/offers/${id}`).then((r) => r.data);
 
-export const fetchDashboard = () => api.get('/api/dashboard').then((r) => r.data);
-export const fetchAnalytics = (year) => api.get('/api/analytics/occupancy', { params: { year } }).then((r) => r.data);
+export const fetchDashboard = (params) => api.get('/api/dashboard', { params }).then((r) => r.data);
 
 export const joinWaitlist = (data) => api.post('/api/waitlist', data).then((r) => r.data);
 export const checkWaitlist = (phone) => api.get(`/api/waitlist/${phone}`).then((r) => r.data);

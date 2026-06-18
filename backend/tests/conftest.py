@@ -31,36 +31,25 @@ os.environ.setdefault("OPEN_METEO_BASE_URL", "https://api.open-meteo.com")
 os.environ.setdefault("GST_RATE", "0.18")
 os.environ.setdefault("GST_NUMBER", "TEST_GST")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
-os.environ["GUEST_PLATFORM_FEE_PERCENT"] = "10.0"
-os.environ["HOST_PLATFORM_FEE_PERCENT"] = "3.0"
 
-import database as db_module
 from database import database  # noqa: E402
 from main import create_app  # noqa: E402
 from services.auth import hash_password  # noqa: E402
 from models.common import utc_now  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def override_platform_fees():
-    from config import settings
-
-    settings.GUEST_PLATFORM_FEE_PERCENT = 10.0
-    settings.HOST_PLATFORM_FEE_PERCENT = 3.0
-
-
 @pytest.fixture
 async def mock_db():
     client = AsyncMongoMockClient()
     db = client["stayease_test"]
-    db_module._client = client
-    db_module._db = db
-    await db_module.ensure_indexes()
-    db_module._transactions_available = False
+    database._client = client
+    database._db = db
+    await database.ensure_indexes()
+    database._transactions_available = False
     yield db
-    db_module._client = None
-    db_module._db = None
-    db_module._transactions_available = False
+    database._client = None
+    database._db = None
+    database._transactions_available = False
 
 
 @pytest.fixture

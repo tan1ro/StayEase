@@ -1,34 +1,75 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import SafeImage from './SafeImage';
 import { getRoomGalleryImages } from '../utils/roomImages';
 
-export default function RoomImageCarousel({ photos = [], roomId = 'room' }) {
+const AUTO_SCROLL_MS = 4000;
+
+export default function RoomImageCarousel({ photos = [], roomId = 'room', autoScrollMs = AUTO_SCROLL_MS }) {
   const images = getRoomGalleryImages(photos, roomId, Math.max(photos.length, 1));
   const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const intervalRef = useRef(null);
   const active = images[index] ?? images[0];
 
+  const goToIndex = useCallback((nextIndex) => {
+    setIndex((nextIndex + images.length) % images.length);
+  }, [images.length]);
+
   const prev = (e) => {
-    e.stopPropagation();
-    setIndex((i) => (i === 0 ? images.length - 1 : i - 1));
+    e?.stopPropagation();
+    goToIndex(index - 1);
   };
 
   const next = (e) => {
-    e.stopPropagation();
-    setIndex((i) => (i === images.length - 1 ? 0 : i + 1));
+    e?.stopPropagation();
+    goToIndex(index + 1);
   };
 
   const goTo = (i) => (e) => {
     e.stopPropagation();
-    setIndex(i);
+    goToIndex(i);
   };
+
+  useEffect(() => {
+    setIndex(0);
+  }, [roomId, photos.length]);
+
+  useEffect(() => {
+    if (images.length <= 1 || paused || autoScrollMs <= 0) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return undefined;
+    }
+
+    intervalRef.current = setInterval(() => {
+      setIndex((i) => (i === images.length - 1 ? 0 : i + 1));
+    }, autoScrollMs);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [images.length, paused, autoScrollMs]);
 
   if (!images.length) {
     return <div className="carousel carousel--empty" data-testid="carousel-empty" />;
   }
 
   return (
-    <div className="room-carousel">
+    <div
+      className="room-carousel"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
+      }}
+    >
       <div className="room-carousel__frame">
         <SafeImage
           src={active?.url}
@@ -98,6 +139,7 @@ export default function RoomImageCarousel({ photos = [], roomId = 'room' }) {
           height: 100%;
           object-fit: cover;
           display: block;
+          transition: opacity 0.35s ease;
         }
         .room-carousel__frame .safe-image--placeholder {
           display: flex;

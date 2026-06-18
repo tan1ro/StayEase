@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from database import connect_db, disconnect_db
+from database import database
 from routes.analytics import router as analytics_router
 from routes.attractions import router as attractions_router
 from routes.auth import router as auth_router
@@ -23,16 +23,17 @@ from routes.waitlist import router as waitlist_router
 from routes.wishlist import router as wishlist_router
 from routes.hosts import router as hosts_router
 from routes.inquiries import router as inquiries_router
+from routes.chat import router as chat_router
 from services.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await connect_db()
+    await database.connect()
     start_scheduler()
     yield
     stop_scheduler()
-    await disconnect_db()
+    await database.disconnect()
 
 
 def create_app() -> FastAPI:
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(wishlist_router)
     app.include_router(hosts_router)
     app.include_router(inquiries_router)
+    app.include_router(chat_router)
 
     @app.get("/health", tags=["health"])
     async def health_check():

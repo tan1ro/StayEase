@@ -19,7 +19,6 @@ import Messages from './pages/guest/Messages';
 import FindMyRoom from './pages/guest/FindMyRoom';
 import Receipt from './pages/guest/Receipt';
 import Wishlist from './pages/guest/Wishlist';
-import Profile from './pages/guest/Profile';
 import HostProfile from './pages/guest/HostProfile';
 import AccountSettings from './pages/guest/AccountSettings';
 
@@ -33,8 +32,6 @@ import ViewYourSpace from './pages/host/ViewYourSpace';
 import ListingPreferences from './pages/host/ListingPreferences';
 import ManageBookings from './pages/host/ManageBookings';
 import HostMessages from './pages/host/HostMessages';
-import Insights from './pages/host/Insights';
-import Earnings from './pages/host/Earnings';
 import Payouts from './pages/host/Payouts';
 import ManageOffers from './pages/host/ManageOffers';
 import HostSettings from './pages/host/HostSettings';
@@ -47,6 +44,7 @@ import ListingSetupPhone from './pages/host/listing-setup/ListingSetupPhone';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
 import VerifyIdentity from './pages/auth/VerifyIdentity';
 
 import PrivacyPolicy from './pages/shared/PrivacyPolicy';
@@ -57,6 +55,7 @@ import NondiscriminationPolicy from './pages/shared/help/NondiscriminationPolicy
 import ServiceFees from './pages/shared/help/ServiceFees';
 import Notifications from './pages/shared/Notifications';
 import HelpCentre from './pages/shared/HelpCentre';
+import LiveChat from './components/LiveChat';
 import NotFound from './pages/shared/NotFound';
 import Unauthorized from './pages/shared/Unauthorized';
 import ServerError from './pages/shared/ServerError';
@@ -86,7 +85,8 @@ function Layout() {
   const isHostShell = isHostPortalPath(location.pathname) && !isListingWizard && !isListingSetup && !isHostPreview;
   const hideNavSearch = isHostPortalPath(location.pathname)
     || location.pathname.startsWith('/login')
-    || location.pathname.startsWith('/register');
+    || location.pathname.startsWith('/register')
+    || location.pathname.startsWith('/forgot-password');
 
   return (
     <div className="app-layout">
@@ -108,7 +108,7 @@ function Layout() {
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} />
           <Route path="/find-my-room" element={<FindMyRoom />} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/profile" element={<Navigate to="/settings" replace />} />
           <Route path="/receipt/:id" element={<ProtectedRoute><Receipt /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
@@ -122,9 +122,9 @@ function Layout() {
             <Route path="rooms/:id/preferences" element={<ListingPreferences />} />
             <Route path="bookings" element={<ManageBookings />} />
             <Route path="messages" element={<HostMessages />} />
-            <Route path="analytics" element={<Earnings />} />
-            <Route path="insights" element={<Insights />} />
-            <Route path="earnings" element={<Navigate to="/host/analytics" replace />} />
+            <Route path="earnings" element={<Navigate to="/host?tab=earnings" replace />} />
+            <Route path="insights" element={<Navigate to="/host?tab=listings" replace />} />
+            <Route path="analytics" element={<Navigate to="/host" replace />} />
             <Route path="payouts" element={<Payouts />} />
             <Route path="offers" element={<ManageOffers />} />
             <Route path="settings" element={<HostSettings />} />
@@ -138,6 +138,7 @@ function Layout() {
           <Route path="/host/listings/setup/phone" element={<HostRoute><ListingSetupPhone /></HostRoute>} />
 
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-identity" element={<ProtectedRoute><VerifyIdentity /></ProtectedRoute>} />
 
@@ -156,6 +157,7 @@ function Layout() {
       </main>
       {!isListingWizard && !isHostShell && !isListingSetup && !isHostPreview && <Footer />}
       {!isListingWizard && !isHostShell && !isListingSetup && !isHostPreview && <MobileBottomNav />}
+      <LiveChat />
       <GlobalModals />
     </div>
   );

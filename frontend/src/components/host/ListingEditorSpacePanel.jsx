@@ -4,7 +4,7 @@ import ErrorMessage from '../ErrorMessage';
 import AmenityPicker from '../AmenityPicker';
 import { formatCurrency } from '../../api/api';
 import { ROOM_CATEGORIES } from '../../constants/roomCategories';
-import { FACING_OPTIONS } from '../../constants/roomPlacement';
+import { FACING_OPTIONS, normalizeViewType } from '../../constants/roomPlacement';
 import { guestPaysPerNightInclGst, listingPricePreview } from '../../utils/listingPricePreview';
 import { getAvatarUrl } from '../../utils/roomImages';
 import SafeImage from '../SafeImage';
@@ -24,8 +24,7 @@ const VIEW_OPTIONS = [
   { value: 'city_view', label: 'City view' },
   { value: 'garden_view', label: 'Garden view' },
   { value: 'hill_view', label: 'Hill view' },
-  { value: 'sea_view', label: 'Sea view' },
-  { value: 'beach_view', label: 'Beach view' },
+  { value: 'beach_view', label: 'Beach & sea view' },
   { value: 'pool_view', label: 'Pool view' },
 ];
 
@@ -60,7 +59,7 @@ export default function ListingEditorSpacePanel({
   const [roomCategory, setRoomCategory] = useState(room.room_category || 'Double');
   const [bedConfig, setBedConfig] = useState(room.bed_configuration || 'double_bed');
   const [foodPreference, setFoodPreference] = useState(room.food_preference || 'veg');
-  const [viewType, setViewType] = useState(room.view_type || 'none');
+  const [viewType, setViewType] = useState(normalizeViewType(room.view_type));
   const [facingSide, setFacingSide] = useState(room.facing_side || 'none');
   const [floorLabel, setFloorLabel] = useState(room.floor_label || '');
   const [viewDescription, setViewDescription] = useState(room.view_description || '');
@@ -84,7 +83,7 @@ export default function ListingEditorSpacePanel({
     setRoomCategory(room.room_category || 'Double');
     setBedConfig(room.bed_configuration || 'double_bed');
     setFoodPreference(room.food_preference || 'veg');
-    setViewType(room.view_type || 'none');
+    setViewType(normalizeViewType(room.view_type));
     setFacingSide(room.facing_side || 'none');
     setFloorLabel(room.floor_label || '');
     setViewDescription(room.view_description || '');

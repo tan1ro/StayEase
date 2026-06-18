@@ -30,35 +30,8 @@ async def _complete_past_stays() -> None:
     )
 
 
-async def _send_checkin_day_whatsapp() -> None:
-    """Check-in morning: WhatsApp only (no email)."""
-    today = date.today().isoformat()
-    bookings = database.collection("bookings")
-    cursor = bookings.find({"check_in_date": today, "status": "confirmed"})
-    async for booking in cursor:
-        result = await bookings.update_one(
-            {"_id": booking["_id"], "reminder_flags.checkin_day": {"$ne": True}},
-            {"$set": {"reminder_flags.checkin_day": True}},
-        )
-        if result.modified_count == 0:
-            continue
-        phone = booking.get("guest_phone")
-        if not phone:
-            continue
-        room_id = booking.get("room_id", "")
-        send_whatsapp(
-            phone,
-            (
-                f"StayEase: Today is your check-in day. "
-                f"Booking {str(booking.get('_id', ''))[-8:].upper()} is ready. "
-                f"Room ref {room_id[-6:] if room_id else 'N/A'}. Have a great stay."
-            ),
-        )
-
-
 async def _process_reminders() -> None:
     await _complete_past_stays()
-    await _send_checkin_day_whatsapp()
     bookings = database.collection("bookings")
     now = datetime.utcnow().date()
     for days, date_field, template, send_wa, flag_key in REMINDER_WINDOWS:

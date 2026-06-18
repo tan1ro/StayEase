@@ -63,8 +63,6 @@ services:
       OPEN_METEO_BASE_URL: https://api.open-meteo.com
       GST_RATE: "0.18"
       GST_NUMBER: DEV_GST_NUMBER
-      GUEST_PLATFORM_FEE_PERCENT: "10.0"
-      HOST_PLATFORM_FEE_PERCENT: "3.0"
       FRONTEND_URL: http://localhost:5173
       JWT_EXPIRE_MINUTES: "10080"
     ports:

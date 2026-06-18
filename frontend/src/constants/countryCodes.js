@@ -1,0 +1,81 @@
+/** Phone countries supported in StayEase signup and profile flows. */
+export const PHONE_COUNTRIES = [
+  {
+    code: 'IN',
+    name: 'India',
+    dial: '+91',
+    dialDigits: '91',
+    flag: '🇮🇳',
+    minLength: 10,
+    maxLength: 10,
+    pattern: /^[6-9]\d{9}$/,
+    errorMessage: 'Enter a valid 10-digit Indian mobile number (starts with 6–9)',
+    placeholder: '98765 43210',
+  },
+  {
+    code: 'US',
+    name: 'United States',
+    dial: '+1',
+    dialDigits: '1',
+    flag: '🇺🇸',
+    minLength: 10,
+    maxLength: 10,
+    pattern: /^[2-9]\d{9}$/,
+    errorMessage: 'Enter a valid 10-digit US phone number',
+    placeholder: '201 555 0123',
+  },
+  {
+    code: 'GB',
+    name: 'United Kingdom',
+    dial: '+44',
+    dialDigits: '44',
+    flag: '🇬🇧',
+    minLength: 10,
+    maxLength: 10,
+    pattern: /^7\d{9}$/,
+    errorMessage: 'Enter a valid UK mobile number (10 digits, starts with 7)',
+    placeholder: '7123 456789',
+  },
+  {
+    code: 'AE',
+    name: 'United Arab Emirates',
+    dial: '+971',
+    dialDigits: '971',
+    flag: '🇦🇪',
+    minLength: 9,
+    maxLength: 9,
+    pattern: /^5\d{8}$/,
+    errorMessage: 'Enter a valid UAE mobile number (9 digits, starts with 5)',
+    placeholder: '501 234567',
+  },
+  {
+    code: 'SG',
+    name: 'Singapore',
+    dial: '+65',
+    dialDigits: '65',
+    flag: '🇸🇬',
+    minLength: 8,
+    maxLength: 8,
+    pattern: /^[89]\d{7}$/,
+    errorMessage: 'Enter a valid Singapore mobile number (8 digits, starts with 8 or 9)',
+    placeholder: '8123 4567',
+  },
+  {
+    code: 'AU',
+    name: 'Australia',
+    dial: '+61',
+    dialDigits: '61',
+    flag: '🇦🇺',
+    minLength: 9,
+    maxLength: 9,
+    pattern: /^4\d{8}$/,
+    errorMessage: 'Enter a valid Australian mobile number (9 digits, starts with 4)',
+    placeholder: '412 345 678',
+  },
+];
+
+export const DEFAULT_PHONE_COUNTRY = 'IN';
+
+export function getPhoneCountry(countryCode = DEFAULT_PHONE_COUNTRY) {
+  return PHONE_COUNTRIES.find((c) => c.code === countryCode) || PHONE_COUNTRIES[0];
+}

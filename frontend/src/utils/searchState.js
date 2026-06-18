@@ -5,9 +5,10 @@ export function readLocationFromParams(searchParams) {
   if (searchParams.get('nearby') === 'true') {
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
+    const label = searchParams.get('nearby_label') || 'Nearby';
     return {
       mode: 'nearby',
-      label: 'Nearby',
+      label,
       city: '',
       search: '',
       lat: lat || '',
@@ -28,6 +29,7 @@ export function readLocationFromParams(searchParams) {
 
 export function applyLocationToParams(next, location) {
   next.delete('nearby');
+  next.delete('nearby_label');
   next.delete('lat');
   next.delete('lng');
   next.delete('radius_km');
@@ -39,6 +41,7 @@ export function applyLocationToParams(next, location) {
     next.set('lat', String(location.lat));
     next.set('lng', String(location.lng));
     next.set('radius_km', String(NEARBY_RADIUS_KM));
+    if (location.label) next.set('nearby_label', location.label);
     return;
   }
 
@@ -61,7 +64,8 @@ export function applyLocationToParams(next, location) {
 
 export function buildLocationSelection({ where, locationMode, coords, searchParams }) {
   if (locationMode === 'nearby' && coords.lat && coords.lng) {
-    return { type: 'nearby', lat: Number(coords.lat), lng: Number(coords.lng), label: 'Nearby' };
+    const label = searchParams.get('nearby_label') || where.trim() || 'Nearby';
+    return { type: 'nearby', lat: Number(coords.lat), lng: Number(coords.lng), label };
   }
   const cityParam = searchParams.get('city');
   if (cityParam) {
@@ -94,8 +98,7 @@ export function syncSearchParams(searchParams, setSearchParams, { location, chec
 export function getMobileSearchSummary(searchParams) {
   const parts = [];
   const loc = readLocationFromParams(searchParams);
-  if (loc.mode === 'nearby') parts.push('Nearby');
-  else if (loc.label) parts.push(loc.label);
+  if (loc.label) parts.push(loc.label);
   const ci = searchParams.get('check_in');
   const co = searchParams.get('check_out');
   if (ci || co) parts.push(formatRangeLabel(ci, co));

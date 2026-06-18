@@ -7,6 +7,8 @@ export default function ListingWizardShell({
   sectionProgress,
   onBack,
   onNext,
+  onSaveExit,
+  saveExitLabel = 'Save & exit',
   nextLabel = 'Next',
   nextDisabled = false,
   children,
@@ -23,7 +25,13 @@ export default function ListingWizardShell({
         <Logo to="/host" />
         <div className="listing-wizard__header-actions">
           <button type="button" className="listing-wizard__header-btn">Questions?</button>
-          <Link to="/host/rooms" className="listing-wizard__header-btn">Save &amp; exit</Link>
+          {onSaveExit ? (
+            <button type="button" className="listing-wizard__header-btn" onClick={onSaveExit}>
+              {saveExitLabel}
+            </button>
+          ) : (
+            <Link to="/host/rooms" className="listing-wizard__header-btn">Save &amp; exit</Link>
+          )}
         </div>
       </header>
 

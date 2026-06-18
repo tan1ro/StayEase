@@ -14,19 +14,42 @@ export const FACING_LABELS = Object.fromEntries(
   FACING_OPTIONS.map(({ value, label }) => [value, label]),
 );
 
+export const BEACH_SEA_VIEW_TYPES = ['beach_view', 'sea_view'];
+
 export const VIEW_TYPE_LABELS = {
   hill_view: 'Mountain view',
-  beach_view: 'Beach view',
+  beach_view: 'Beach & sea view',
   garden_view: 'Garden view',
-  sea_view: 'Sea view',
+  sea_view: 'Beach & sea view',
   city_view: 'City view',
   pool_view: 'Pool view',
   none: 'Standard view',
 };
 
+export function toggleViewFilter(currentView, option) {
+  const values = option.matchValues || [option.value];
+  const allSelected = values.every((v) => currentView.includes(v));
+  if (allSelected) return currentView.filter((v) => !values.includes(v));
+  const next = [...currentView];
+  for (const v of values) {
+    if (!next.includes(v)) next.push(v);
+  }
+  return next;
+}
+
+export function isViewFilterActive(currentView, option) {
+  const values = option.matchValues || [option.value];
+  return values.some((v) => currentView.includes(v));
+}
+
 export function formatFacingSide(facing) {
   if (!facing || facing === 'none') return null;
   return FACING_LABELS[facing] || facing.replace(/_/g, ' ');
+}
+
+export function normalizeViewType(viewType) {
+  if (viewType === 'sea_view') return 'beach_view';
+  return viewType || 'none';
 }
 
 export function formatViewType(viewType) {

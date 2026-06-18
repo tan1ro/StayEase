@@ -34,14 +34,13 @@ export default function Messages() {
   return (
     <div className="page">
       <h1 className="page-title">Messages</h1>
-      <p className="page-subtitle">Two-way conversations with hosts about listings — reply anytime before you book.</p>
+      <p className="page-subtitle">Messages you&apos;ve sent to hosts before booking.</p>
       <InquiryInbox
         inquiries={inquiries}
         scope="sent"
         loading={loading}
         error={error}
         onRetry={load}
-        onReplied={load}
       />
     </div>
   );
