@@ -8203,6 +8203,12 @@ html:not(.dark) .onboarding-loading {
   color: var(--text-secondary);
 }
 
+.host-dashboard__panel-sub {
+  margin: -0.5rem 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
 .host-dashboard__chart {
   height: 280px;
   width: 100%;

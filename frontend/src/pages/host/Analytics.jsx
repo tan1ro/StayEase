@@ -13,9 +13,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Calendar, IndianRupee, Star, TrendingUp } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
-import { HostHero, HostPage, HostPanel } from '../../components/host/HostPageLayout';
+import { HostHero, HostKpi, HostKpiGrid, HostPage, HostPanel } from '../../components/host/HostPageLayout';
 import { analyticsApi, formatCurrency } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -50,6 +51,7 @@ export default function Analytics() {
 
   const [year, setYear] = useState(currentYear);
   const [data, setData] = useState(null);
+  const [dash, setDash] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -58,8 +60,12 @@ export default function Analytics() {
     setLoading(true);
     setError('');
     try {
-      const { data: analytics } = await analyticsApi.occupancy(year);
-      setData(analytics);
+      const [analyticsRes, dashRes] = await Promise.all([
+        analyticsApi.occupancy(year),
+        analyticsApi.dashboard({ year }),
+      ]);
+      setData(analyticsRes.data);
+      setDash(dashRes.data);
     } catch (err) {
       setError(err.normalized?.message || 'Failed to load analytics');
     } finally {
@@ -115,6 +121,13 @@ export default function Analytics() {
           </select>
         )}
       />
+
+      <HostKpiGrid>
+        <HostKpi icon={TrendingUp} variant="occupancy" label="YTD occupancy" value={`${Number(dash?.ytd_occupancy_avg ?? 0).toFixed(0)}%`} hint={`Peak month: ${dash?.peak_month || '—'}`} />
+        <HostKpi icon={IndianRupee} variant="earnings" label="YTD revenue" value={formatCurrency(dash?.ytd_revenue ?? 0)} hint={`${dash?.ytd_bookings ?? 0} bookings`} />
+        <HostKpi icon={Calendar} variant="bookings" label="Avg stay" value={`${dash?.avg_stay_nights ?? 0} nights`} hint={`Busiest: ${dash?.busiest_day || '—'}`} />
+        <HostKpi icon={Star} variant="rating" label="Avg daily rate" value={formatCurrency(dash?.avg_daily_rate ?? 0)} hint="Per booked night" />
+      </HostKpiGrid>
 
       <div className="host-dashboard__body">
         <section className="host-dashboard__panel host-dashboard__main">

@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Plus, Trash2 } from 'lucide-react';
+import { Building2, Edit, Plus, Star, Trash2 } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmModal from '../../components/ConfirmModal';
-import SafeImage from '../../components/SafeImage';
+import Modal from '../../components/Modal';
+import HostListingCard, { isListingIncomplete } from '../../components/host/HostListingCard';
 import { Icon, ICON } from '../../components/ui/Icon';
-import { HostHero, HostPage, HostPanel } from '../../components/host/HostPageLayout';
+import { HostHero, HostKpi, HostKpiGrid, HostPage, HostPanel } from '../../components/host/HostPageLayout';
 import { formatCurrency, roomsApi } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
-import { getPrimaryRoomImage } from '../../utils/roomImages';
 
 export default function ManageRooms() {
   const { user } = useAuth();
@@ -19,7 +19,7 @@ export default function ManageRooms() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [togglingId, setTogglingId] = useState(null);
+  const [actionRoom, setActionRoom] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
@@ -38,10 +38,22 @@ export default function ManageRooms() {
 
   useEffect(() => { load(); }, [hostId]);
 
+  const summary = useMemo(() => {
+    const live = rooms.filter((r) => r.is_available).length;
+    const drafts = rooms.filter((r) => !r.is_available || isListingIncomplete(r)).length;
+    const rated = rooms.filter((r) => r.avg_rating);
+    const avgRating = rated.length
+      ? rated.reduce((sum, r) => sum + Number(r.avg_rating), 0) / rated.length
+      : 0;
+    const avgPrice = rooms.length
+      ? rooms.reduce((sum, r) => sum + (r.price_per_night || 0), 0) / rooms.length
+      : 0;
+    return { live, drafts, avgRating, avgPrice };
+  }, [rooms]);
+
   const toggleAvailability = async (room) => {
     const roomId = room._id || room.id;
     const next = !room.is_available;
-    setTogglingId(roomId);
     setError('');
     try {
       await roomsApi.update(roomId, { is_available: next });
@@ -50,8 +62,6 @@ export default function ManageRooms() {
       )));
     } catch (err) {
       setError(err.normalized?.message || 'Could not update availability');
-    } finally {
-      setTogglingId(null);
     }
   };
 
@@ -63,6 +73,7 @@ export default function ManageRooms() {
       await roomsApi.remove(deleteTarget);
       setRooms((prev) => prev.filter((r) => (r._id || r.id) !== deleteTarget));
       setDeleteTarget(null);
+      setActionRoom(null);
     } catch (err) {
       setError(err.normalized?.message || 'Could not delete room');
     } finally {
@@ -76,8 +87,8 @@ export default function ManageRooms() {
     <HostPage>
       <HostHero
         title="Manage rooms"
-        subtitle="Update pricing, availability, and listing details."
-        pills={[`${rooms.length} room${rooms.length === 1 ? '' : 's'}`]}
+        subtitle="Update pricing, photos, availability, and GST-ready listing details."
+        pills={[`${rooms.length} listing${rooms.length === 1 ? '' : 's'}`, `${summary.live} live`]}
         actions={(
           <Link to="/host/rooms/add" className="host-dashboard__action host-dashboard__action--primary">
             <Icon icon={Plus} size={ICON.sm} /> Add room
@@ -85,88 +96,75 @@ export default function ManageRooms() {
         )}
       />
 
+      <HostKpiGrid>
+        <HostKpi icon={Building2} variant="bookings" label="Live listings" value={summary.live} hint={`${summary.drafts} need work`} />
+        <HostKpi icon={Star} variant="rating" label="Avg rating" value={summary.avgRating ? summary.avgRating.toFixed(1) : '—'} hint="Across live rooms" />
+        <HostKpi icon={Building2} variant="earnings" label="Avg nightly rate" value={formatCurrency(summary.avgPrice)} hint="Portfolio average" />
+        <HostKpi icon={Building2} variant="occupancy" label="Total listings" value={rooms.length} hint="Including drafts" />
+      </HostKpiGrid>
+
       <ErrorMessage message={error} onRetry={load} />
 
-      <HostPanel title="Your listings">
+      <HostPanel title="Your listings" subtitle="Each card opens the listing editor. Publish drafts to appear in guest search.">
         {rooms.length === 0 ? (
           <div className="host-dashboard__empty">
-            No rooms yet. Add your first room.
-            <div style={{ marginTop: '1rem' }}>
-              <Link to="/host/rooms/add" className="btn btn-primary">Add room</Link>
-            </div>
+            <h3 style={{ margin: '0 0 0.5rem' }}>No rooms yet</h3>
+            <p>Add your first listing with photos, GST pricing, and house rules.</p>
+            <Link to="/host/rooms/add" className="btn btn-primary" style={{ marginTop: '1rem' }}>Add room</Link>
           </div>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table trips-table">
-              <thead>
-                <tr>
-                  <th>Photo</th>
-                  <th>Room #</th>
-                  <th>Type</th>
-                  <th>Price</th>
-                  <th>Available</th>
-                  <th>Rating</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rooms.map((room) => {
-                  const roomId = room._id || room.id;
-                  const photo = getPrimaryRoomImage(room);
-                  return (
-                    <tr key={roomId}>
-                      <td data-label="Photo">
-                        <SafeImage
-                          src={photo}
-                          alt={room.title || 'Room'}
-                          className="safe-image"
-                          fallbackSeed={roomId}
-                          style={{ width: 56, height: 40, objectFit: 'cover', borderRadius: 6 }}
-                        />
-                      </td>
-                      <td data-label="Room #">{room.room_number || '—'}</td>
-                      <td data-label="Type">{room.room_category || '—'}</td>
-                      <td data-label="Price">{formatCurrency(room.price_per_night)}</td>
-                      <td data-label="Available">
-                        <label className="form-hint" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(room.is_available)}
-                            disabled={togglingId === roomId}
-                            onChange={() => toggleAvailability(room)}
-                            aria-label={`Toggle availability for room ${room.room_number}`}
-                          />
-                          {room.is_available ? 'Live' : 'Draft'}
-                        </label>
-                      </td>
-                      <td data-label="Rating">{room.avg_rating ? `${Number(room.avg_rating).toFixed(1)} ★` : '—'}</td>
-                      <td className="trips-table__actions-cell" data-label="Actions">
-                        <div className="trips-table__actions">
-                          <Link
-                            to={`/host/rooms/edit/${roomId}`}
-                            className="btn btn-ghost btn-sm"
-                            aria-label="Edit room"
-                          >
-                            <Icon icon={Edit} size={ICON.sm} />
-                          </Link>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setDeleteTarget(roomId)}
-                            aria-label="Delete room"
-                          >
-                            <Icon icon={Trash2} size={ICON.sm} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="host-listings-grid">
+            {rooms.map((room) => (
+              <HostListingCard
+                key={room._id || room.id}
+                room={room}
+                onAction={setActionRoom}
+              />
+            ))}
           </div>
         )}
       </HostPanel>
+
+      {actionRoom && (
+        <Modal open onClose={() => setActionRoom(null)} title={actionRoom.title || 'Listing options'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Link
+              to={`/host/rooms/${actionRoom._id || actionRoom.id}/editor`}
+              className="btn btn-outline btn-sm"
+              onClick={() => setActionRoom(null)}
+            >
+              <Icon icon={Edit} size={ICON.sm} /> Open editor
+            </Link>
+            <Link
+              to={`/host/rooms/edit/${actionRoom._id || actionRoom.id}`}
+              className="btn btn-outline btn-sm"
+              onClick={() => setActionRoom(null)}
+            >
+              Quick edit
+            </Link>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                toggleAvailability(actionRoom);
+                setActionRoom(null);
+              }}
+            >
+              {actionRoom.is_available ? 'Unpublish' : 'Publish listing'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setDeleteTarget(actionRoom._id || actionRoom.id);
+                setActionRoom(null);
+              }}
+            >
+              <Icon icon={Trash2} size={ICON.sm} /> Delete
+            </button>
+          </div>
+        </Modal>
+      )}
 
       <ConfirmModal
         open={!!deleteTarget}

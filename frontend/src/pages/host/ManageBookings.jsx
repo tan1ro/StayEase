@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Calendar, IndianRupee, Users, X } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import Badge from '../../components/Badge';
 import ConfirmModal from '../../components/ConfirmModal';
 import {
   HostHero,
+  HostKpi,
+  HostKpiGrid,
   HostPage,
   HostPanel,
   HostTabs,
@@ -62,6 +65,18 @@ export default function ManageBookings() {
 
   useEffect(() => { load(); }, [filter, hostId]);
 
+  const summary = useMemo(() => {
+    const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
+    const revenue = bookings
+      .filter((b) => b.status !== 'cancelled' && b.payment_status === 'paid')
+      .reduce((sum, b) => sum + (b.host_payout ?? b.subtotal ?? b.total_price ?? 0), 0);
+    const gst = bookings
+      .filter((b) => b.status !== 'cancelled')
+      .reduce((sum, b) => sum + (b.gst_amount ?? 0), 0);
+    const guests = new Set(bookings.map((b) => b.guest_id || b.guest_email).filter(Boolean)).size;
+    return { confirmed, revenue, gst, guests };
+  }, [bookings]);
+
   const confirmCancel = async () => {
     if (!cancelId) return;
     setCancelling(true);
@@ -83,9 +98,16 @@ export default function ManageBookings() {
     <HostPage>
       <HostHero
         title="Bookings"
-        subtitle="Manage guest reservations, payments, and cancellations."
-        pills={[`${bookings.length} shown`]}
+        subtitle="Manage guest reservations, GST invoices, and cancellations."
+        pills={[`${bookings.length} reservation${bookings.length === 1 ? '' : 's'}`, `${summary.confirmed} confirmed`]}
       />
+
+      <HostKpiGrid>
+        <HostKpi icon={Users} variant="bookings" label="Unique guests" value={summary.guests} hint="In this view" />
+        <HostKpi icon={Calendar} variant="occupancy" label="Confirmed" value={summary.confirmed} hint="Active stays" />
+        <HostKpi icon={IndianRupee} variant="earnings" label="Host earnings" value={formatCurrency(summary.revenue)} hint="Paid bookings" />
+        <HostKpi icon={IndianRupee} variant="rating" label="GST on bookings" value={formatCurrency(summary.gst)} hint="CGST + SGST" />
+      </HostKpiGrid>
 
       <HostTabs
         tabs={TAB_LABELS.map((label, i) => ({ id: FILTERS[i], label }))}
@@ -95,9 +117,13 @@ export default function ManageBookings() {
 
       <ErrorMessage message={error} onRetry={load} />
 
-      <HostPanel title="Reservation list">
+      <HostPanel title="Reservation list" subtitle="Tap a row on mobile to see all booking details.">
         {bookings.length === 0 ? (
-          <div className="host-dashboard__empty">No bookings found for this filter.</div>
+          <div className="host-dashboard__empty">
+            <h3 style={{ margin: '0 0 0.5rem' }}>No bookings yet</h3>
+            <p>When guests book your listings, reservations and GST breakdowns will show up here.</p>
+            <Link to="/host/rooms" className="btn btn-primary btn-sm" style={{ marginTop: '1rem' }}>Review listings</Link>
+          </div>
         ) : (
           <div className="table-wrap">
             <table className="data-table trips-table">
