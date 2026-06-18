@@ -49,7 +49,7 @@ export default function Notifications() {
 
   return (
     <div className="page-narrow">
-      <header style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+      <header className="notification-page-header">
         <Icon icon={Bell} size={ICON.lg} />
         <div>
           <h1 className="page-title" style={{ marginBottom: 0 }}>Notifications</h1>
@@ -90,15 +90,6 @@ export default function Notifications() {
           ))}
         </ul>
       )}
-
-      <style>{`
-        .notification-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
-        .notification-item {
-          display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
-          padding: 1rem 1.25rem;
-        }
-        .notification-item--unread { border-left: 3px solid var(--primary); }
-      `}</style>
     </div>
   );
 }

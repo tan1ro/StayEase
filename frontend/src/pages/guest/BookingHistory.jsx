@@ -1,41 +1,131 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CreditCard, Download, Plane, Star, X } from 'lucide-react';
-import { bookingsApi, formatCurrency } from '../../api/api';
-import CancellationModal from '../../components/CancellationModal';
+import { Plane, Search } from 'lucide-react';
+import { bookingsApi, roomsApi, waitlistApi } from '../../api/api';
+import ConfirmModal from '../../components/ConfirmModal';
 import ErrorMessage from '../../components/ErrorMessage';
 import Spinner from '../../components/Spinner';
-import StatusBadge from '../../components/StatusBadge';
+import TripBookingCard from '../../components/TripBookingCard';
+import TripsViewToggle from '../../components/TripsViewToggle';
 import WriteReviewModal from '../../components/WriteReviewModal';
+import { HostTabs } from '../../components/host/HostPageLayout';
 import { Icon, ICON } from '../../components/ui/Icon';
-import { formatRangeLabel } from '../../utils/dates';
+import { useAuth } from '../../context/AuthContext';
 
-function formatGuests(count) {
-  if (count == null || Number.isNaN(Number(count))) return '—';
-  const n = Number(count);
-  return `${n} guest${n === 1 ? '' : 's'}`;
+const FILTERS = ['', 'confirmed', 'completed', 'cancelled'];
+const TAB_LABELS = ['All', 'Confirmed', 'Completed', 'Cancelled'];
+const VIEW_KEY = 'stayease_trips_view';
+
+function loadViewMode() {
+  try {
+    const saved = localStorage.getItem(VIEW_KEY);
+    if (saved === 'list' || saved === 'grid') return saved;
+    if (saved === 'compact') return 'grid';
+  } catch {
+    /* ignore */
+  }
+  return 'list';
 }
 
 export default function BookingHistory() {
+  const { user } = useAuth();
+  const guestId = user?.id || user?._id;
+
   const [bookings, setBookings] = useState([]);
+  const [roomMap, setRoomMap] = useState({});
+  const [notifyWaitlist, setNotifyWaitlist] = useState([]);
+  const [filter, setFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelId, setCancelId] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
   const [reviewBooking, setReviewBooking] = useState(null);
+  const [viewMode, setViewMode] = useState(loadViewMode);
 
-  const load = async () => {
-    setLoading(true);
+  const handleViewChange = (mode) => {
+    setViewMode(mode);
     try {
-      const { data } = await bookingsApi.list({ scope: 'traveling' });
-      setBookings(data);
+      localStorage.setItem(VIEW_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const load = useCallback(async () => {
+    if (!guestId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const params = { guest_id: guestId, ...(filter ? { status_filter: filter } : {}) };
+      const { data } = await bookingsApi.list(params);
+      const list = data || [];
+      setBookings(list);
+
+      const roomIds = [...new Set(list.map((b) => b.room_id).filter(Boolean))];
+      const rooms = await Promise.all(
+        roomIds.map(async (roomId) => {
+          try {
+            const { data: room } = await roomsApi.get(roomId);
+            return [roomId, room];
+          } catch {
+            return [roomId, null];
+          }
+        }),
+      );
+      setRoomMap(Object.fromEntries(rooms));
+
+      if (user?.phone) {
+        try {
+          const { data: waitlistItems } = await waitlistApi.byPhone(user.phone);
+          setNotifyWaitlist((waitlistItems || []).filter((item) => item.status === 'notify'));
+        } catch {
+          setNotifyWaitlist([]);
+        }
+      } else {
+        setNotifyWaitlist([]);
+      }
     } catch (err) {
       setError(err.normalized?.message || 'Failed to load bookings');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, guestId, user?.phone]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const filteredBookings = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return bookings;
+    return bookings.filter((b) => {
+      const room = roomMap[b.room_id];
+      const haystack = [
+        b.guest_name,
+        b.room_title,
+        room?.room_number,
+        room?.title,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [bookings, roomMap, search]);
+
+  const confirmCancel = async () => {
+    if (!cancelId) return;
+    setCancelling(true);
+    setError('');
+    try {
+      await bookingsApi.cancel(cancelId);
+      setCancelId(null);
+      await load();
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not cancel booking');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -48,90 +138,81 @@ export default function BookingHistory() {
   return (
     <div className="page">
       <h1 className="page-title">My Trips</h1>
-      <ErrorMessage message={error} onRetry={load} />
-      {bookings.length === 0 ? (
-        <div className="empty-state empty-state--fill">
-          <Icon icon={Plane} size={ICON.xl} />
-          <p>No trips yet.</p>
-          <Link to="/" className="btn btn-primary">Browse stays</Link>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table className="data-table trips-table">
-            <thead>
-              <tr>
-                <th>Room</th>
-                <th>Dates</th>
-                <th>Guests</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.map((b) => (
-                <tr key={b._id}>
-                  <td className="trips-table__room">
-                    <span className="trips-table__room-title">
-                      {b.room_title || `Room ${b.room_id?.slice(-6) || b.room_id}`}
-                    </span>
-                  </td>
-                  <td className="trips-table__dates">
-                    {formatRangeLabel(b.check_in_date, b.check_out_date) || '—'}
-                  </td>
-                  <td className="trips-table__guests">{formatGuests(b.num_guests)}</td>
-                  <td className="trips-table__total">{formatCurrency(b.total_price)}</td>
-                  <td>
-                    <div className="trips-table__status">
-                      <StatusBadge status={b.status} />
-                      {b.has_review && (
-                        <span className="booking-reviewed-note">Reviewed</span>
-                      )}
-                      {b.status === 'cancelled' && b.refund_amount != null && (
-                        <span className="booking-refund-note">
-                          Refund: {formatCurrency(b.refund_amount)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="trips-table__actions">
-                      {b.can_review && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={() => setReviewBooking(b)}
-                        >
-                          <Star size={14} /> Rate hotel
-                        </button>
-                      )}
-                      {b.payment_status === 'pending' && b.status === 'confirmed' && (
-                        <Link to={`/receipt/${b._id}`} className="btn btn-primary btn-sm">
-                          <CreditCard size={14} /> Pay now
-                        </Link>
-                      )}
-                      <Link to={`/receipt/${b._id}`} className="btn btn-outline btn-sm">
-                        <Download size={14} /> Receipt
-                      </Link>
-                      {b.status === 'confirmed' && (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCancelId(b._id)}>
-                          <X size={14} /> Cancel
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+      {notifyWaitlist.length > 0 && (
+        <div className="host-alert-banner" role="alert" style={{ marginBottom: '1rem' }}>
+          <span className="host-alert-banner__dot" aria-hidden="true" />
+          <div>
+            {notifyWaitlist.map((item) => (
+              <p key={item._id || item.id}>
+                <strong>Room {item.room_number || item.room_id?.slice(-6) || 'available'} is now available!</strong>{' '}
+                <Link to={`/rooms/${item.room_id}`}>Book now →</Link>
+              </p>
+            ))}
+          </div>
         </div>
       )}
-      <CancellationModal
-        open={!!cancelId}
-        bookingId={cancelId}
-        onClose={() => setCancelId(null)}
-        onCancelled={load}
+
+      <HostTabs
+        tabs={TAB_LABELS.map((label, i) => ({ id: FILTERS[i], label }))}
+        active={filter}
+        onChange={setFilter}
       />
+
+      <div className="trips-toolbar">
+        <div className="form-group trips-toolbar__search">
+          <label className="label" htmlFor="trip-search">Search trips</label>
+          <div className="trips-toolbar__search-wrap">
+            <Search
+              size={16}
+              className="trips-toolbar__search-icon"
+              aria-hidden="true"
+            />
+            <input
+              id="trip-search"
+              className="input"
+              placeholder="Guest name or room number"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+        <TripsViewToggle value={viewMode} onChange={handleViewChange} />
+      </div>
+
+      <ErrorMessage message={error} onRetry={load} />
+
+      {filteredBookings.length === 0 ? (
+        <div className="empty-state empty-state--fill">
+          <Icon icon={Plane} size={ICON.xl} />
+          <p>No bookings yet.</p>
+          <Link to="/" className="btn btn-primary">Find a room →</Link>
+        </div>
+      ) : (
+        <div className={`trips-layout trips-layout--${viewMode}`}>
+          {filteredBookings.map((b) => (
+            <TripBookingCard
+              key={b._id || b.id}
+              booking={b}
+              room={roomMap[b.room_id]}
+              view={viewMode}
+              onReview={setReviewBooking}
+              onCancel={setCancelId}
+            />
+          ))}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!cancelId}
+        title="Cancel booking?"
+        message="This will cancel your reservation. Refunds follow the listing cancellation policy."
+        confirmLabel={cancelling ? 'Cancelling…' : 'Cancel booking'}
+        onConfirm={confirmCancel}
+        onClose={() => !cancelling && setCancelId(null)}
+        error={cancelling ? '' : undefined}
+      />
+
       <WriteReviewModal
         open={!!reviewBooking}
         booking={reviewBooking}

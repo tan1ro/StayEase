@@ -56,6 +56,21 @@ class BookingCreate(BaseModel):
     room_preference_notes: Optional[str] = Field(None, max_length=300)
 
 
+class BookingBatchCreate(BaseModel):
+    room_ids: list[str] = Field(min_length=1, max_length=6)
+    check_in_date: date
+    check_out_date: date
+    num_guests: int = Field(ge=1, le=10)
+    offer_code: Optional[str] = None
+    booking_for: BookingFor = "self"
+    staying_guest_name: Optional[str] = Field(None, max_length=80)
+    staying_guest_phone: Optional[str] = None
+    guest_photo_url: Optional[str] = None
+    identity_proof: Optional[BookingIdentityProof] = None
+    host_message: Optional[str] = Field(None, max_length=500)
+    room_preference_notes: Optional[str] = Field(None, max_length=300)
+
+
 class BookingInDB(MongoModel):
     room_id: str
     guest_id: str
@@ -88,4 +103,6 @@ class BookingInDB(MongoModel):
     host_message: Optional[str] = None
     preferred_room_number: Optional[str] = None
     room_preference_notes: Optional[str] = None
+    booking_group_id: Optional[str] = None
+    linked_room_ids: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)

@@ -57,7 +57,7 @@ function DetailRow({ label, value, strong = false }) {
   );
 }
 
-export default function HotelVoucher({ booking, room, invoice, hostPhone }) {
+export default function HotelVoucher({ booking, room, invoice, hostPhone, qrData }) {
   if (!booking || !room) return null;
 
   const location = room.location || {};
@@ -74,6 +74,9 @@ export default function HotelVoucher({ booking, room, invoice, hostPhone }) {
   const discount = booking.discount_amount || 0;
   const guestFee = booking.guest_platform_fee || 0;
   const invoiceNumber = invoice?.invoice_number || `SE-${String(booking._id).slice(-8).toUpperCase()}`;
+  const qrUrl = qrData
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qrData)}`
+    : null;
 
   return (
     <article className="hotel-voucher" id="hotel-voucher-print">
@@ -82,7 +85,14 @@ export default function HotelVoucher({ booking, room, invoice, hostPhone }) {
         <div className="hotel-voucher__title-block">
           <Icon icon={BedDouble} size={ICON.lg} />
           <h1>Hotel Confirmation Voucher</h1>
+          <p className="hotel-voucher__status">STATUS: CONFIRMED</p>
         </div>
+        {qrUrl && (
+          <div className="hotel-voucher__qr" aria-label="Check-in QR code">
+            <img src={qrUrl} alt="" width={100} height={100} />
+            <span>Check-in QR</span>
+          </div>
+        )}
       </header>
 
       <div className="hotel-voucher__guest-bar">

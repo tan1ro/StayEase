@@ -38,33 +38,6 @@ export default function HostPayoutBreakdown({ booking, compact = false }) {
           Guest paid {formatCurrency(guestPaid)} including GST and guest service fee
         </p>
       )}
-      <style>{`
-        .host-payout-breakdown {
-          border-top: 1px solid var(--border);
-          padding-top: 0.75rem;
-          margin-top: 0.75rem;
-          font-size: 0.9rem;
-        }
-        .host-payout-breakdown--compact { font-size: 0.85rem; }
-        .host-payout-breakdown__row {
-          display: flex;
-          justify-content: space-between;
-          padding: 0.3rem 0;
-          color: var(--text-secondary);
-        }
-        .host-payout-breakdown__row--fee span:last-child { color: var(--danger, #c13515); }
-        .host-payout-breakdown__row--total {
-          border-top: 1px solid var(--border);
-          margin-top: 0.35rem;
-          padding-top: 0.5rem;
-          color: var(--text-primary);
-        }
-        .host-payout-breakdown__note {
-          margin: 0.5rem 0 0;
-          font-size: 0.8rem;
-          color: var(--text-secondary);
-        }
-      `}</style>
     </div>
   );
 }

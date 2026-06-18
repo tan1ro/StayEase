@@ -37,6 +37,7 @@ import ManageOffers from './pages/host/ManageOffers';
 import HostSettings from './pages/host/HostSettings';
 import HostingResources from './pages/host/HostingResources';
 import HostCalendar from './pages/host/HostCalendar';
+import Analytics from './pages/host/Analytics';
 import ListingSetupOverview from './pages/host/listing-setup/ListingSetupOverview';
 import ListingSetupIdentity from './pages/host/listing-setup/ListingSetupIdentity';
 import ListingSetupIdentityUpload from './pages/host/listing-setup/ListingSetupIdentityUpload';
@@ -60,6 +61,12 @@ import NotFound from './pages/shared/NotFound';
 import Unauthorized from './pages/shared/Unauthorized';
 import ServerError from './pages/shared/ServerError';
 import { isHostPortalPath } from './utils/routes';
+
+function ProfileRedirect() {
+  const { hash } = useLocation();
+  const normalized = !hash || hash === '#settings' ? '' : hash;
+  return <Navigate to={`/settings${normalized}`} replace />;
+}
 
 function GlobalModals() {
   const { authGate, closeAuthGate } = useOnboarding();
@@ -108,7 +115,7 @@ function Layout() {
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} />
           <Route path="/find-my-room" element={<FindMyRoom />} />
-          <Route path="/profile" element={<Navigate to="/settings" replace />} />
+          <Route path="/profile" element={<ProtectedRoute><ProfileRedirect /></ProtectedRoute>} />
           <Route path="/receipt/:id" element={<ProtectedRoute><Receipt /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
@@ -124,7 +131,7 @@ function Layout() {
             <Route path="messages" element={<HostMessages />} />
             <Route path="earnings" element={<Navigate to="/host?tab=earnings" replace />} />
             <Route path="insights" element={<Navigate to="/host?tab=listings" replace />} />
-            <Route path="analytics" element={<Navigate to="/host" replace />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="payouts" element={<Payouts />} />
             <Route path="offers" element={<ManageOffers />} />
             <Route path="settings" element={<HostSettings />} />

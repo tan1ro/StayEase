@@ -55,15 +55,6 @@ export default function GSTBreakdown({
         <span>Total GST ({(rate * 100).toFixed(0)}%)</span>
         <span data-testid="total-gst">{formatCurrency(totalGst)}</span>
       </div>
-      <style>{`
-        .gst-breakdown__row {
-          display: flex;
-          justify-content: space-between;
-          padding: 0.25rem 0;
-          font-size: 0.9rem;
-          color: var(--text-secondary);
-        }
-      `}</style>
     </div>
   );
 }

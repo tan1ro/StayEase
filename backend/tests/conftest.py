@@ -32,6 +32,7 @@ os.environ.setdefault("GST_RATE", "0.18")
 os.environ.setdefault("GST_NUMBER", "TEST_GST")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
+import database as db_module
 from database import database  # noqa: E402
 from main import create_app  # noqa: E402
 from services.auth import hash_password  # noqa: E402
@@ -42,14 +43,14 @@ from models.common import utc_now  # noqa: E402
 async def mock_db():
     client = AsyncMongoMockClient()
     db = client["stayease_test"]
-    database._client = client
-    database._db = db
+    db_module._client = client
+    db_module._db = db
     await database.ensure_indexes()
-    database._transactions_available = False
+    db_module._transactions_available = False
     yield db
-    database._client = None
-    database._db = None
-    database._transactions_available = False
+    db_module._client = None
+    db_module._db = None
+    db_module._transactions_available = False
 
 
 @pytest.fixture

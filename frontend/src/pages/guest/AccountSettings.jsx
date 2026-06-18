@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -38,11 +38,13 @@ import {
 import {
   ADDRESS_PREFS_KEY,
   DEFAULT_ADDRESS_PREFS,
+  DEFAULT_GUEST_TAX_PREFS,
   DEFAULT_LOCALE_PREFS,
   DEFAULT_NOTIFICATION_DETAIL,
   DEFAULT_PRIVACY_PREFS,
   DEFAULT_PRO_TOOLS_PREFS,
   GUEST_SETTINGS_SECTIONS,
+  GUEST_TAX_PREFS_KEY,
   LOCALE_PREFS_KEY,
   NOTIFICATION_DETAIL_KEY,
   PREFERRED_NAME_KEY,
@@ -52,13 +54,19 @@ import {
   formatTimezoneLabel,
   loadJsonPref,
   maskEmail,
+  maskGstin,
   saveJsonPref,
 } from '../../constants/accountSettings';
+import { getAvatarUrl } from '../../utils/roomImages';
 import { formatRangeLabel } from '../../utils/dates';
 
 const PIE_COLORS = ['#4F7FE8', '#6B9AFF', '#E85D75', '#E8A84F'];
 
-const HASH_ALIASES = { about: 'personal' };
+const HASH_ALIASES = { about: 'personal', settings: 'personal' };
+
+function normalizePhone(value) {
+  return (value || '').replace(/\D/g, '').slice(-10);
+}
 
 function loadPastTrips() {
   return bookingsApi.list({ scope: 'traveling' }).then(({ data }) => {
@@ -83,6 +91,7 @@ function formatNotifStatus(on) {
 
 export default function AccountSettings() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, refreshUser, canAccessHostPortal, becomeHost } = useAuth();
   const { consent, acceptAll, acceptEssential } = useCookieConsent();
 
@@ -105,7 +114,7 @@ export default function AccountSettings() {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [travelDashboard, setTravelDashboard] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [referralStats, setReferralStats] = useState({ count: 0 });
+  const [referralStats, setReferralStats] = useState({ total_referred: 0 });
   const [reviewBooking, setReviewBooking] = useState(null);
 
   const [addressPrefs, setAddressPrefs] = useState(() => loadJsonPref(ADDRESS_PREFS_KEY, DEFAULT_ADDRESS_PREFS));
@@ -113,6 +122,8 @@ export default function AccountSettings() {
   const [localePrefs, setLocalePrefs] = useState(() => loadJsonPref(LOCALE_PREFS_KEY, DEFAULT_LOCALE_PREFS));
   const [notifDetail, setNotifDetail] = useState(() => loadJsonPref(NOTIFICATION_DETAIL_KEY, DEFAULT_NOTIFICATION_DETAIL));
   const [proToolsPrefs, setProToolsPrefs] = useState(() => loadJsonPref(PRO_TOOLS_PREFS_KEY, DEFAULT_PRO_TOOLS_PREFS));
+  const [guestTaxPrefs, setGuestTaxPrefs] = useState(() => loadJsonPref(GUEST_TAX_PREFS_KEY, DEFAULT_GUEST_TAX_PREFS));
+  const [gstinInput, setGstinInput] = useState('');
 
   const [taxSummary, setTaxSummary] = useState(null);
   const [recentBookings, setRecentBookings] = useState([]);
@@ -123,12 +134,12 @@ export default function AccountSettings() {
   const [modal, setModal] = useState(null);
 
   useEffect(() => {
-    const hash = window.location.hash.replace('#', '');
+    const hash = (location.hash || window.location.hash).replace('#', '');
     const resolved = HASH_ALIASES[hash] || hash;
     if (resolved && GUEST_SETTINGS_SECTIONS.some((s) => s.id === resolved)) {
       setActive(resolved);
     }
-  }, []);
+  }, [location.pathname, location.hash]);
 
   useEffect(() => {
     if (user) {
@@ -175,14 +186,54 @@ export default function AccountSettings() {
 
   useEffect(() => {
     if (active === 'taxes') {
-      analyticsApi.guestDashboard()
-        .then(({ data }) => setTaxSummary(data))
+      Promise.all([
+        analyticsApi.guestDashboard().then(({ data }) => data).catch(() => null),
+        bookingsApi.list({ scope: 'traveling' }).then(({ data }) => data || []).catch(() => []),
+      ])
+        .then(([dash, bookings]) => {
+          const paid = bookings.filter((b) => b.payment_status === 'paid' && b.status !== 'cancelled');
+          const total_gst = paid.reduce((sum, b) => sum + (b.gst_amount || 0), 0);
+          setTaxSummary({ ...dash, total_gst });
+        })
         .catch(() => setTaxSummary(null));
     }
     if (active === 'dashboard') {
       setDashboardLoading(true);
-      analyticsApi.guestDashboard()
-        .then(({ data }) => setTravelDashboard(data))
+      const guestId = user?.id || user?._id;
+      Promise.all([
+        analyticsApi.guestDashboard().then(({ data }) => data).catch(() => null),
+        guestId
+          ? bookingsApi.list({ guest_id: guestId }).then(({ data }) => data || []).catch(() => [])
+          : Promise.resolve([]),
+      ])
+        .then(([dash, allBookings]) => {
+          const year = new Date().getFullYear();
+          const paid = allBookings.filter((b) => b.payment_status === 'paid' && b.status !== 'cancelled');
+          const yearPaid = paid.filter((b) => (b.check_in_date || '').startsWith(String(year)));
+          const totalSpentYear = yearPaid.reduce((sum, b) => sum + (b.total_price || 0), 0);
+          const totalNights = yearPaid.reduce((sum, b) => sum + (b.total_nights || 0), 0);
+          const totalGst = yearPaid.reduce((sum, b) => sum + (b.gst_amount || 0), 0);
+          const monthly = Array.from({ length: 12 }, (_, i) => ({
+            month: new Date(year, i, 1).toLocaleDateString('en-IN', { month: 'short' }),
+            spent: yearPaid
+              .filter((b) => Number((b.check_in_date || '').slice(5, 7)) === i + 1)
+              .reduce((sum, b) => sum + (b.total_price || 0), 0),
+          }));
+          const statusBreakdown = [
+            { name: 'Confirmed', value: allBookings.filter((b) => b.status === 'confirmed').length },
+            { name: 'Completed', value: allBookings.filter((b) => b.status === 'completed').length },
+            { name: 'Cancelled', value: allBookings.filter((b) => b.status === 'cancelled').length },
+          ];
+          setTravelDashboard({
+            ...dash,
+            spend_year: totalSpentYear,
+            nights_year: totalNights,
+            avg_per_night: totalNights ? totalSpentYear / totalNights : 0,
+            gst_year: totalGst,
+            monthly_spend: monthly,
+            status_breakdown: statusBreakdown,
+          });
+        })
         .catch(() => setTravelDashboard(null))
         .finally(() => setDashboardLoading(false));
     }
@@ -191,7 +242,7 @@ export default function AccountSettings() {
         .then(({ data }) => setRecentBookings((data || []).slice(0, 5)))
         .catch(() => setRecentBookings([]));
     }
-  }, [active]);
+  }, [active, user?.id, user?._id]);
 
   const clearMessages = () => {
     setSuccess('');
@@ -211,7 +262,7 @@ export default function AccountSettings() {
     try {
       const fd = new FormData();
       fd.append('name', fields.name ?? name);
-      fd.append('phone', fields.phone ?? phone);
+      fd.append('phone', normalizePhone(fields.phone ?? phone));
       fd.append('about_me', fields.about ?? about ?? user?.about_me ?? '');
       fd.append('notification_prefs', JSON.stringify({
         email: fields.emailPrefs ?? emailPrefs,
@@ -241,6 +292,39 @@ export default function AccountSettings() {
     setSuccess('Address saved');
     setModal(null);
   };
+
+  const saveGuestTaxPrefs = () => {
+    const next = { gstin: gstinInput.trim().toUpperCase() };
+    setGuestTaxPrefs(next);
+    saveJsonPref(GUEST_TAX_PREFS_KEY, next);
+    setSuccess('Tax information saved');
+    setModal(null);
+  };
+
+  const saveAvatar = async (file) => {
+    if (!file) return;
+    setLoading(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('avatar', file);
+      await authApi.updateProfile(fd);
+      await refreshUser();
+      setSuccess('Profile photo updated');
+      setModal(null);
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not upload photo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openGstinModal = () => {
+    setGstinInput(guestTaxPrefs.gstin || '');
+    setModal('gstin');
+  };
+
+  const avatarUrl = user?.avatar_url || getAvatarUrl(user?.name, user?.id);
 
   const updatePrivacy = (key, value) => {
     const next = { ...privacyPrefs, [key]: value };
@@ -286,12 +370,12 @@ export default function AccountSettings() {
     <ErrorMessage message={error} />
   ) : null;
 
-  const spendData = travelDashboard?.recent_bookings?.map((b, i) => ({
+  const spendData = travelDashboard?.monthly_spend || travelDashboard?.recent_bookings?.map((b, i) => ({
     month: `B${i + 1}`,
     spent: b.total_price,
   })) || [];
 
-  const statusData = [
+  const statusData = travelDashboard?.status_breakdown || [
     { name: 'Confirmed', value: travelDashboard?.upcoming_trips || 0 },
     { name: 'Total', value: travelDashboard?.total_bookings || 0 },
   ];
@@ -364,7 +448,7 @@ export default function AccountSettings() {
   );
 
   const dashboardPanel = (
-    <SettingsPanel title="Dashboard" subtitle="Your travel spending and booking activity.">
+    <SettingsPanel title="My Spending" subtitle="Your travel spending and booking activity this year.">
       {alert}
       {dashboardLoading ? (
         <Spinner label="Loading dashboard..." />
@@ -372,20 +456,20 @@ export default function AccountSettings() {
         <>
           <div className="profile-dashboard-stats">
             <div className="profile-dashboard-stats__card">
-              <span>Total spent</span>
-              <strong>{formatCurrency(travelDashboard.total_spent)}</strong>
+              <span>Total spent this year</span>
+              <strong>{formatCurrency(travelDashboard.spend_year ?? travelDashboard.total_spent)}</strong>
             </div>
             <div className="profile-dashboard-stats__card">
-              <span>Total bookings</span>
-              <strong>{travelDashboard.total_bookings}</strong>
+              <span>Total nights stayed</span>
+              <strong>{travelDashboard.nights_year ?? '—'}</strong>
             </div>
             <div className="profile-dashboard-stats__card">
-              <span>Upcoming</span>
-              <strong>{travelDashboard.upcoming_trips}</strong>
+              <span>Average per night</span>
+              <strong>{formatCurrency(travelDashboard.avg_per_night ?? 0)}</strong>
             </div>
             <div className="profile-dashboard-stats__card">
-              <span>Referral credits</span>
-              <strong>{formatCurrency(travelDashboard.referral_credits)}</strong>
+              <span>Total GST paid</span>
+              <strong>{formatCurrency(travelDashboard.gst_year ?? 0)}</strong>
             </div>
           </div>
           <div className="profile-dashboard-charts">
@@ -669,14 +753,19 @@ export default function AccountSettings() {
           <SettingsSection
             title="Taxpayer information"
             description="Tax info is required for most countries/regions."
-            footer={<SettingsCta onClick={() => setModal('gstin')}>Add tax info</SettingsCta>}
+            footer={<SettingsCta onClick={openGstinModal}>Add tax info</SettingsCta>}
           >
-            <SettingsRow label="GSTIN" value="Not provided" action="Add" onAction={() => setModal('gstin')} />
+            <SettingsRow
+              label="GSTIN"
+              value={guestTaxPrefs.gstin ? maskGstin(guestTaxPrefs.gstin) : undefined}
+              action={guestTaxPrefs.gstin ? 'Edit' : 'Add'}
+              onAction={openGstinModal}
+            />
           </SettingsSection>
           <SettingsSection
             title="Value Added Tax (VAT)"
             description="If you are VAT-registered, please add your VAT ID."
-            footer={<SettingsCta onClick={() => setModal('gstin')}>Add VAT ID number</SettingsCta>}
+            footer={<SettingsCta onClick={openGstinModal}>Add VAT ID number</SettingsCta>}
           >
             {taxSummary ? (
               <>
@@ -797,7 +886,12 @@ export default function AccountSettings() {
           action={user?.email_verified ? 'View' : 'Verify'}
           onAction={() => setModal('identity')}
         />
-        <SettingsRow label="Profile photo" value="Not required" action="Add" onAction={() => setModal('photo')} />
+        <SettingsRow
+          label="Profile photo"
+          value={user?.avatar_url ? 'Provided' : 'Not required'}
+          action={user?.avatar_url ? 'Edit' : 'Add'}
+          onAction={() => setModal('photo')}
+        />
         <SettingsRow
           label="Phone number"
           value={user?.phone ? 'Provided' : 'Required for booking updates'}
@@ -813,7 +907,12 @@ export default function AccountSettings() {
       {alert}
       <SettingsSection>
         <SettingsLinkRow label="Download invoices from My trips" to="/bookings" />
-        <SettingsRow label="Company GSTIN on invoices" value="Not provided" action="Add" onAction={() => setModal('gstin')} />
+        <SettingsRow
+          label="Company GSTIN on invoices"
+          value={guestTaxPrefs.gstin ? maskGstin(guestTaxPrefs.gstin) : undefined}
+          action={guestTaxPrefs.gstin ? 'Edit' : 'Add'}
+          onAction={openGstinModal}
+        />
         <SettingsRow
           label="Expense reports"
           description="Export receipts with CGST/SGST breakdown for reimbursement."
@@ -882,7 +981,7 @@ export default function AccountSettings() {
   return (
     <>
       <SettingsLayout
-        title="Profile"
+        title="Account settings"
         sections={GUEST_SETTINGS_SECTIONS}
         activeId={active}
         onSelect={handleSelect}
@@ -911,11 +1010,21 @@ export default function AccountSettings() {
         </form>
       </Modal>
 
+      <Modal open={modal === 'about'} onClose={() => setModal(null)} title="About me">
+        <form className="account-settings__inline-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }}>
+          <div className="form-group">
+            <label className="label">Bio</label>
+            <textarea className="textarea" value={about} onChange={(e) => setAbout(e.target.value)} rows={4} placeholder="Tell hosts a little about yourself" />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Saving…' : 'Save'}</button>
+        </form>
+      </Modal>
+
       <Modal open={modal === 'phone'} onClose={() => setModal(null)} title="Phone number">
         <form className="account-settings__inline-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }}>
           <div className="form-group">
             <label className="label">Phone</label>
-            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91…" />
+            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" />
           </div>
           <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Saving…' : 'Save'}</button>
         </form>
@@ -1003,9 +1112,45 @@ export default function AccountSettings() {
         <p style={{ color: 'var(--text-secondary)' }}>Contact support to change your login email: <a href="mailto:support@stayease.com">support@stayease.com</a></p>
       </Modal>
 
-      <Modal open={!!modal && ['passkeys', 'password', 'google', 'deactivate', 'shared', 'gstin', 'payment-method', 'gift-card', 'coupon', 'photo', 'donation'].includes(modal)} onClose={() => setModal(null)} title="Coming soon">
+      <Modal open={modal === 'photo'} onClose={() => setModal(null)} title="Profile photo">
+        <div className="account-settings__photo-modal">
+          <img src={avatarUrl} alt="" className="account-settings__avatar-preview account-settings__avatar-preview--large" />
+          <input
+            type="file"
+            accept="image/*"
+            className="input"
+            onChange={(e) => saveAvatar(e.target.files?.[0])}
+          />
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+            A profile photo helps hosts recognize you at check-in.
+          </p>
+        </div>
+      </Modal>
+
+      <Modal open={modal === 'gstin'} onClose={() => setModal(null)} title="Tax information">
+        <form className="account-settings__inline-form" onSubmit={(e) => { e.preventDefault(); saveGuestTaxPrefs(); }}>
+          <div className="form-group">
+            <label className="label">GSTIN</label>
+            <input className="input" value={gstinInput} onChange={(e) => setGstinInput(e.target.value)} placeholder="22AAAAA0000A1Z5" />
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+            Used on invoices for work travel and expense reimbursement.
+          </p>
+          <button type="submit" className="btn btn-primary">Save</button>
+        </form>
+      </Modal>
+
+      <Modal open={!!modal && ['passkeys', 'password', 'google', 'deactivate', 'shared', 'payment-method', 'gift-card', 'coupon', 'donation'].includes(modal)} onClose={() => setModal(null)} title="Coming soon">
         <p style={{ color: 'var(--text-secondary)' }}>This feature is not available in the demo build yet. Email <a href="mailto:support@stayease.com">support@stayease.com</a> for help.</p>
       </Modal>
+
+      <WriteReviewModal
+        open={!!reviewBooking}
+        booking={reviewBooking}
+        roomTitle={reviewBooking?.room_title}
+        onClose={() => setReviewBooking(null)}
+        onSubmitted={refreshTrips}
+      />
     </>
   );
 }

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from database import database
+from database import connect_db, disconnect_db
 from routes.analytics import router as analytics_router
 from routes.attractions import router as attractions_router
 from routes.auth import router as auth_router
@@ -29,11 +29,11 @@ from services.scheduler import start_scheduler, stop_scheduler
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await database.connect()
+    await connect_db()
     start_scheduler()
     yield
     stop_scheduler()
-    await database.disconnect()
+    await disconnect_db()
 
 
 def create_app() -> FastAPI:

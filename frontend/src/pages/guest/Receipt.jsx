@@ -1,37 +1,25 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { CheckCircle2, Download, Printer, Star } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { Download, FileText, Printer, Receipt as ReceiptIcon } from 'lucide-react';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
-import HotelVoucher from '../../components/HotelVoucher';
 import MockPaymentPanel from '../../components/MockPaymentPanel';
-import WriteReviewModal from '../../components/WriteReviewModal';
-import { bookingsApi, reviewsApi, roomsApi } from '../../api/api';
+import HotelVoucher from '../../components/HotelVoucher';
+import TaxInvoice from '../../components/TaxInvoice';
+import { bookingsApi, downloadBlob, hostsApi, roomsApi } from '../../api/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Receipt() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [booking, setBooking] = useState(null);
   const [room, setRoom] = useState(null);
   const [invoice, setInvoice] = useState(null);
-  const [reviewState, setReviewState] = useState({ can_review: false, has_review: false });
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const [hostPhone, setHostPhone] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [paidNotice, setPaidNotice] = useState(false);
-
-  const needsPayment = booking?.payment_status === 'pending' && booking?.status !== 'cancelled';
-  const invoicePdfUrl = booking?.invoice_url || invoice?.pdf_url;
-
-  const handlePaid = async (updatedBooking) => {
-    setBooking(updatedBooking);
-    setPaidNotice(true);
-    try {
-      const invoiceRes = await bookingsApi.invoice(id);
-      if (invoiceRes?.data) setInvoice(invoiceRes.data);
-    } catch {
-      // Invoice may lag slightly; voucher still shows paid state.
-    }
-  };
+  const [tab, setTab] = useState('voucher');
+  const [downloading, setDownloading] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -42,18 +30,29 @@ export default function Receipt() {
         const { data: bookingData } = await bookingsApi.get(id);
         if (cancelled) return;
         setBooking(bookingData);
-        const [roomRes, invoiceRes, reviewRes] = await Promise.all([
+        const [{ data: roomData }] = await Promise.all([
           roomsApi.get(bookingData.room_id),
-          bookingsApi.invoice(id).catch(() => null),
-          reviewsApi.byBooking(id).catch(() => ({ data: { can_review: false, has_review: false } })),
         ]);
-        if (cancelled) return;
-        setRoom(roomRes.data);
-        if (invoiceRes?.data) setInvoice(invoiceRes.data);
-        setReviewState(reviewRes.data || { can_review: false, has_review: false });
+        if (!cancelled) setRoom(roomData);
+        if (bookingData.payment_status === 'paid') {
+          try {
+            const { data: invoiceData } = await bookingsApi.invoice(id);
+            if (!cancelled) setInvoice(invoiceData);
+          } catch {
+            /* invoice may not exist for legacy bookings */
+          }
+        }
+        if (roomData?.host_id) {
+          try {
+            const { data: hostProfile } = await hostsApi.getProfile(roomData.host_id);
+            if (!cancelled) setHostPhone(hostProfile?.phone || '');
+          } catch {
+            /* optional */
+          }
+        }
       } catch (err) {
         if (!cancelled) {
-          setError(err.normalized?.message || 'Voucher not found');
+          setError(err.normalized?.message || 'Receipt not found');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -62,73 +61,133 @@ export default function Receipt() {
     return () => { cancelled = true; };
   }, [id]);
 
-  if (loading) return <Spinner label="Loading voucher..." />;
-  if (error) return <ErrorMessage message={error} />;
+  const isPaid = booking?.payment_status === 'paid';
+  const receiptUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/receipt/${id}`
+    : `/receipt/${id}`;
+
+  const handleDownload = async (type) => {
+    if (!isPaid) return;
+    setDownloading(type);
+    try {
+      const apiCall = type === 'voucher'
+        ? bookingsApi.downloadVoucherPdf
+        : bookingsApi.downloadTaxInvoicePdf;
+      const { data } = await apiCall(id);
+      const suffix = invoice?.invoice_number || String(id).slice(-6);
+      const filename = type === 'voucher'
+        ? `StayEase-Voucher-${suffix}.pdf`
+        : `StayEase-Tax-Invoice-${suffix}.pdf`;
+      downloadBlob(data, filename);
+    } catch (err) {
+      setError(err.normalized?.message || 'Could not download PDF');
+    } finally {
+      setDownloading('');
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  if (loading) return <Spinner label="Loading receipt..." />;
+  if (error && !booking) return <ErrorMessage message={error} />;
   if (!booking || !room) return null;
+
+  const needsPayment = booking.payment_status === 'pending' && booking.status !== 'cancelled';
 
   return (
     <div className="receipt-page">
       {needsPayment && (
-        <MockPaymentPanel
-          bookingId={booking._id}
-          totalPrice={booking.total_price}
-          onPaid={handlePaid}
-        />
-      )}
-
-      {booking.payment_status === 'paid' && (
-        <div className="mock-payment-success no-print" role="status">
-          <CheckCircle2 size={20} />
-          <span>Booking confirmed. Your GST invoice is ready to download below.</span>
+        <div className="no-print">
+          <MockPaymentPanel
+            bookingId={booking._id || booking.id}
+            totalPrice={booking.total_price}
+            onPaid={(updated) => setBooking(updated)}
+          />
         </div>
       )}
 
-      {paidNotice && (
-        <div className="mock-payment-success no-print" role="status">
-          <CheckCircle2 size={20} />
-          <span>Payment successful. Your GST invoice has been emailed to you.</span>
-        </div>
-      )}
-
-      {reviewState.can_review && (
-        <div className="rate-stay-banner no-print">
-          <div>
-            <strong>How was your stay?</strong>
-            <p>Rate {room.title} and help other travellers.</p>
-          </div>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => setReviewOpen(true)}>
-            <Star size={14} /> Rate hotel
-          </button>
-        </div>
-      )}
-
-      {reviewState.has_review && (
-        <div className="rate-stay-banner rate-stay-banner--done no-print" role="status">
-          <CheckCircle2 size={18} />
-          <span>Thanks — you&apos;ve already reviewed this stay.</span>
-        </div>
-      )}
+      {error && <div className="no-print"><ErrorMessage message={error} /></div>}
 
       <div className="receipt-page__actions no-print">
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => window.print()}>
-          <Printer size={16} /> Print voucher
-        </button>
-        {invoicePdfUrl && (
-          <a href={invoicePdfUrl} className="btn btn-primary btn-sm" target="_blank" rel="noreferrer" download>
-            <Download size={16} /> Download invoice (PDF)
-          </a>
+        <div className="receipt-page__tabs" role="tablist" aria-label="Document type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'voucher'}
+            className={`receipt-page__tab${tab === 'voucher' ? ' receipt-page__tab--active' : ''}`}
+            onClick={() => setTab('voucher')}
+          >
+            <ReceiptIcon size={16} aria-hidden />
+            Booking Voucher
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'invoice'}
+            className={`receipt-page__tab${tab === 'invoice' ? ' receipt-page__tab--active' : ''}`}
+            onClick={() => setTab('invoice')}
+          >
+            <FileText size={16} aria-hidden />
+            Tax Invoice
+          </button>
+        </div>
+        <div className="receipt-page__download-actions">
+          {isPaid && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={Boolean(downloading)}
+                onClick={() => handleDownload(tab === 'invoice' ? 'invoice' : 'voucher')}
+              >
+                <Download size={16} />
+                {downloading ? 'Downloading…' : `Download ${tab === 'invoice' ? 'Invoice' : 'Voucher'} PDF`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={Boolean(downloading)}
+                onClick={() => handleDownload('voucher')}
+              >
+                <Download size={16} /> Voucher PDF
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={Boolean(downloading)}
+                onClick={() => handleDownload('invoice')}
+              >
+                <Download size={16} /> Invoice PDF
+              </button>
+            </>
+          )}
+          <button type="button" className="btn btn-outline btn-sm" onClick={handlePrint}>
+            <Printer size={16} /> Print
+          </button>
+          <Link to="/bookings" className="btn btn-ghost btn-sm">My Bookings</Link>
+        </div>
+      </div>
+
+      <div className="receipt-page__document" role="tabpanel">
+        {tab === 'voucher' ? (
+          <HotelVoucher
+            booking={booking}
+            room={room}
+            invoice={invoice}
+            hostPhone={hostPhone}
+            qrData={receiptUrl}
+          />
+        ) : (
+          <TaxInvoice
+            booking={booking}
+            room={room}
+            invoice={invoice}
+            guestEmail={user?.email || booking.guest_email}
+          />
         )}
       </div>
-      <HotelVoucher booking={booking} room={room} invoice={invoice} />
-      <WriteReviewModal
-        open={reviewOpen}
-        booking={booking}
-        roomTitle={room.title}
-        onClose={() => setReviewOpen(false)}
-        onSubmitted={() => {
-          setReviewState({ can_review: false, has_review: true });
-        }}
-      />
     </div>
   );
 }

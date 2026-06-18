@@ -22,7 +22,7 @@ import {
   roomsApi,
   validateOffer,
 } from '../../api/api';
-import { useRoomPricing } from '../../hooks/useRoomPricing';
+import { useMultiRoomPricing } from '../../hooks/useMultiRoomPricing';
 import { useAuth } from '../../context/AuthContext';
 import { addDaysISO, todayISO, BOOKING_CALENDAR_MONTHS } from '../../utils/dates';
 
@@ -59,7 +59,10 @@ export default function BookRoom() {
   const [room, setRoom] = useState(null);
   const [checkIn, setCheckIn] = useState(searchParams.get('check_in') || '');
   const [checkOut, setCheckOut] = useState(searchParams.get('check_out') || '');
-  const [guests, setGuests] = useState(Number(searchParams.get('guests')) || 1);
+  const [guestsPerRoom, setGuestsPerRoom] = useState(() => {
+    const fromUrl = Number(searchParams.get('guests'));
+    return Number.isFinite(fromUrl) && fromUrl > 0 ? fromUrl : 1;
+  });
   const [offerCode, setOfferCode] = useState('');
   const [offerApplied, setOfferApplied] = useState(null);
   const [offerError, setOfferError] = useState('');
@@ -71,8 +74,10 @@ export default function BookRoom() {
   const [error, setError] = useState('');
   const [dateError, setDateError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [confirmedBookings, setConfirmedBookings] = useState(null);
   const [confirmedPricing, setConfirmedPricing] = useState(null);
+  const [selectedRoomIds, setSelectedRoomIds] = useState(() => [roomId]);
+  const [propertyRooms, setPropertyRooms] = useState([]);
   const [conflictError, setConflictError] = useState('');
   const [showWaitlistForm, setShowWaitlistForm] = useState(false);
   const [waitlistName, setWaitlistName] = useState('');
@@ -93,14 +98,20 @@ export default function BookRoom() {
 
   const datesReady = Boolean(checkIn && checkOut && !dateValidationError);
 
-  const activeOfferCode = offerApplied?.code || offerCode;
+  const activeOfferCode = offerApplied?.code;
 
-  const { pricing, loading: pricingLoading, error: pricingError, nights } = useRoomPricing(
-    roomId,
+  const activeRoomIds = selectedRoomIds.length ? selectedRoomIds : [roomId];
+
+  const { pricing, loading: pricingLoading, error: pricingError, nights } = useMultiRoomPricing(
+    activeRoomIds,
     dateValidationError ? '' : checkIn,
     dateValidationError ? '' : checkOut,
     activeOfferCode,
   );
+
+  useEffect(() => {
+    setSelectedRoomIds([roomId]);
+  }, [roomId]);
 
   useEffect(() => {
     setDateError(dateValidationError);
@@ -121,14 +132,44 @@ export default function BookRoom() {
   const photo = room?.photos?.find((p) => p.is_primary) || room?.photos?.[0];
   const location = [room?.location?.area, room?.location?.city].filter(Boolean).join(', ');
 
-  const handleSelectRoom = (nextRoomId) => {
-    if (!nextRoomId || nextRoomId === roomId) return;
-    const params = new URLSearchParams();
-    if (checkIn) params.set('check_in', checkIn);
-    if (checkOut) params.set('check_out', checkOut);
-    if (guests) params.set('guests', String(guests));
-    navigate(`/book/${nextRoomId}?${params.toString()}`);
-  };
+  const selectedRooms = useMemo(
+    () => propertyRooms.filter((item) => activeRoomIds.includes(item._id)),
+    [propertyRooms, activeRoomIds],
+  );
+
+  const selectedRoomLabel = useMemo(() => {
+    if (selectedRooms.length > 1) {
+      return selectedRooms.map((item) => item.room_number).filter(Boolean).join(', ');
+    }
+    return room?.room_number || '—';
+  }, [selectedRooms, room?.room_number]);
+
+  const roomCount = activeRoomIds.length;
+  const maxGuestsPerRoom = useMemo(() => {
+    if (selectedRooms.length) {
+      return selectedRooms.reduce(
+        (min, item) => Math.min(min, item.max_guests || room?.max_guests || 10),
+        selectedRooms[0]?.max_guests || room?.max_guests || 10,
+      );
+    }
+    return room?.max_guests || 10;
+  }, [selectedRooms, room?.max_guests]);
+
+  const maxTotalGuests = useMemo(() => {
+    if (selectedRooms.length) {
+      return selectedRooms.reduce((sum, item) => sum + (item.max_guests || room?.max_guests || 0), 0);
+    }
+    return room?.max_guests || 10;
+  }, [selectedRooms, room?.max_guests]);
+
+  const totalGuests = Math.min(guestsPerRoom * roomCount, maxTotalGuests);
+  const guestsSummaryLabel = roomCount > 1
+    ? `${totalGuests} guest${totalGuests !== 1 ? 's' : ''} (${guestsPerRoom} per room)`
+    : `${totalGuests} guest${totalGuests !== 1 ? 's' : ''}`;
+
+  useEffect(() => {
+    setGuestsPerRoom((current) => Math.min(current, maxGuestsPerRoom));
+  }, [maxGuestsPerRoom]);
 
   const handleApplyOffer = async () => {
     const code = offerCode.trim().toUpperCase();
@@ -187,18 +228,21 @@ export default function BookRoom() {
     setConflictError('');
     setShowWaitlistForm(false);
     try {
-      const { data: booking } = await bookingsApi.create({
-        room_id: roomId,
+      const { data } = await bookingsApi.createBatch({
+        room_ids: activeRoomIds,
         check_in_date: checkIn,
         check_out_date: checkOut,
-        num_guests: guests,
+        num_guests: totalGuests,
         offer_code: activeOfferCode || undefined,
-        preferred_room_number: room?.room_number || undefined,
         ...pendingVerificationPayload,
       });
-      const { data: paid } = await bookingsApi.pay(booking._id);
+      const paidBookings = [];
+      for (const booking of data.bookings) {
+        const { data: paid } = await bookingsApi.pay(booking._id);
+        paidBookings.push(paid);
+      }
       setConfirmOpen(false);
-      setConfirmedBooking(paid);
+      setConfirmedBookings(paidBookings);
       setConfirmedPricing(pricing);
     } catch (err) {
       if (err.normalized?.status === 409) {
@@ -251,24 +295,30 @@ export default function BookRoom() {
   if (loading) return <Spinner label="Loading booking..." />;
   if (!room) return <ErrorMessage message={error || 'Room not found'} />;
 
-  const bookingPricing = confirmedPricing || (confirmedBooking ? {
-    subtotal: confirmedBooking.subtotal,
-    total_price: confirmedBooking.total_price,
-    gst_amount: confirmedBooking.gst_amount,
-    gst_rate: confirmedBooking.gst_rate,
-    price_breakdown: confirmedBooking.price_breakdown,
-    total_nights: confirmedBooking.total_nights,
-    final_price_per_night: confirmedBooking.final_price_per_night,
-    guest_platform_fee: confirmedBooking.guest_platform_fee,
-    gst_breakdown: confirmedBooking.gst_amount ? {
-      cgst_amount: confirmedBooking.gst_amount / 2,
-      sgst_amount: confirmedBooking.gst_amount / 2,
-      cgst_rate: confirmedBooking.gst_rate / 2,
-      sgst_rate: confirmedBooking.gst_rate / 2,
+  const bookingPricing = confirmedPricing || (confirmedBookings?.length ? {
+    subtotal: confirmedBookings.reduce((sum, booking) => sum + (booking.subtotal || 0), 0),
+    total_price: confirmedBookings.reduce((sum, booking) => sum + (booking.total_price || 0), 0),
+    gst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0),
+    gst_rate: confirmedBookings[0]?.gst_rate,
+    price_breakdown: confirmedBookings[0]?.price_breakdown,
+    total_nights: confirmedBookings[0]?.total_nights,
+    final_price_per_night: confirmedBookings[0]?.final_price_per_night,
+    guest_platform_fee: confirmedBookings.reduce((sum, booking) => sum + (booking.guest_platform_fee || 0), 0),
+    gst_breakdown: confirmedBookings[0]?.gst_amount ? {
+      cgst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0) / 2,
+      sgst_amount: confirmedBookings.reduce((sum, booking) => sum + (booking.gst_amount || 0), 0) / 2,
+      cgst_rate: (confirmedBookings[0]?.gst_rate || 0) / 2,
+      sgst_rate: (confirmedBookings[0]?.gst_rate || 0) / 2,
     } : undefined,
   } : null);
 
-  if (confirmedBooking) {
+  if (confirmedBookings?.length) {
+    const primaryBooking = confirmedBookings[0];
+    const totalPaid = confirmedBookings.reduce((sum, booking) => sum + (booking.total_price || 0), 0);
+    const roomNumbers = selectedRooms.length
+      ? selectedRooms.map((item) => item.room_number).filter(Boolean).join(', ')
+      : selectedRoomLabel;
+
     return (
       <div className="book-room">
         <div className="card" style={{ padding: '2rem', maxWidth: 720, margin: '0 auto', borderColor: 'var(--success, #16a34a)' }}>
@@ -277,28 +327,28 @@ export default function BookRoom() {
           </h1>
           <div className="book-room__summary-rows" style={{ marginTop: '1.5rem' }}>
             <div className="book-room__summary-row">
-              <span>Booking ID</span>
-              <strong>{confirmedBooking._id}</strong>
+              <span>Booking ID{confirmedBookings.length > 1 ? 's' : ''}</span>
+              <strong>{confirmedBookings.map((booking) => booking._id).join(', ')}</strong>
             </div>
             <div className="book-room__summary-row">
-              <span>Room</span>
-              <strong>{room.title}</strong>
+              <span>Room{confirmedBookings.length > 1 ? 's' : ''}</span>
+              <strong>{roomNumbers || room.title}</strong>
             </div>
             <div className="book-room__summary-row">
               <span>Check-in</span>
-              <strong>{formatStayDate(confirmedBooking.check_in_date)}</strong>
+              <strong>{formatStayDate(primaryBooking.check_in_date)}</strong>
             </div>
             <div className="book-room__summary-row">
               <span>Check-out</span>
-              <strong>{formatStayDate(confirmedBooking.check_out_date)}</strong>
+              <strong>{formatStayDate(primaryBooking.check_out_date)}</strong>
             </div>
             <div className="book-room__summary-row">
               <span>Nights</span>
-              <strong>{confirmedBooking.total_nights}</strong>
+              <strong>{primaryBooking.total_nights}</strong>
             </div>
             <div className="book-room__summary-row">
               <span>Total paid</span>
-              <strong>{formatCurrency(confirmedBooking.total_price)} (incl. GST)</strong>
+              <strong>{formatCurrency(totalPaid)} (incl. GST)</strong>
             </div>
           </div>
           {bookingPricing && (
@@ -307,8 +357,8 @@ export default function BookRoom() {
             </div>
           )}
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-            <Link to={`/receipt/${confirmedBooking._id}`} className="btn btn-primary">
-              <Icon icon={Receipt} size={ICON.sm} /> Download Receipt
+            <Link to={`/receipt/${primaryBooking._id}`} className="btn btn-primary">
+              <Icon icon={Receipt} size={ICON.sm} /> Receipt &amp; Invoice
             </Link>
             <Link to="/bookings" className="btn btn-outline">View My Bookings</Link>
           </div>
@@ -358,36 +408,30 @@ export default function BookRoom() {
               </div>
             </div>
             <div className="form-group">
-              <label className="label">Guests</label>
+              <label className="label">{roomCount > 1 ? 'Guests per room' : 'Guests'}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => setGuests((g) => Math.max(1, g - 1))}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setGuestsPerRoom((count) => Math.max(1, count - 1))}
+                >
                   <Minus size={14} />
                 </button>
-                <span>{guests}</span>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => setGuests((g) => Math.min(room.max_guests, g + 1))}>
+                <span>{guestsPerRoom}</span>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setGuestsPerRoom((count) => Math.min(maxGuestsPerRoom, count + 1))}
+                >
                   <Plus size={14} />
                 </button>
               </div>
-            </div>
-            <div className="form-group">
-              <label className="label">Offer code</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  className="input"
-                  value={offerCode}
-                  onChange={(e) => { setOfferCode(e.target.value.toUpperCase()); setOfferApplied(null); setOfferError(''); }}
-                  placeholder="e.g. WELCOME10"
-                />
-                <button type="button" className="btn btn-outline" onClick={handleApplyOffer} disabled={applyingOffer}>
-                  {applyingOffer ? '…' : 'Apply'}
-                </button>
-              </div>
-              {offerApplied && (
-                <p style={{ color: 'var(--success, #16a34a)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                  <Check size={14} style={{ verticalAlign: 'middle' }} /> {offerApplied.discount_type === 'percentage' ? `${offerApplied.discount_value}% off applied` : `${formatCurrency(offerApplied.discount_value)} off applied`}
+              {roomCount > 1 && (
+                <p className="book-room__guests-hint">
+                  {totalGuests} guest{totalGuests !== 1 ? 's' : ''} total across {roomCount} rooms
+                  {' '}(up to {maxTotalGuests})
                 </p>
               )}
-              {offerError && <p className="form-error">{offerError}</p>}
             </div>
             <RoomBadges
               food_preference={room.food_preference}
@@ -401,14 +445,18 @@ export default function BookRoom() {
 
           {datesReady && (
             <section className="book-room__section card" id="booking-step-room">
-              <h2>2. Pick your room</h2>
-              <p className="book-room__section-lead">Select a room on the floor map — compare views, sunrise, and sunset sides.</p>
+              <h2>2. Pick your room{activeRoomIds.length > 1 ? 's' : ''}</h2>
+              <p className="book-room__section-lead">
+                Select one or more adjoining rooms on the floor map — great for families and groups staying together.
+              </p>
               <RoomFloorPicker
-                roomId={roomId}
+                roomId={activeRoomIds[0] || roomId}
                 currentRoom={room}
                 checkIn={checkIn}
                 checkOut={checkOut}
-                onSelectRoom={handleSelectRoom}
+                selectedRoomIds={activeRoomIds}
+                onChangeSelectedRoomIds={setSelectedRoomIds}
+                onPropertyRoomsChange={setPropertyRooms}
               />
             </section>
           )}
@@ -460,6 +508,32 @@ export default function BookRoom() {
                 You&apos;re on the waitlist! We&apos;ll notify you when this room becomes available.
               </p>
             )}
+            <div className="book-room__offer">
+              <label className="label" htmlFor="book-room-offer-code">Promo code</label>
+              <p className="book-room__offer-lead">Have a code? Apply it here before you pay.</p>
+              <div className="book-room__offer-row">
+                <input
+                  id="book-room-offer-code"
+                  className="input"
+                  value={offerCode}
+                  onChange={(e) => { setOfferCode(e.target.value.toUpperCase()); setOfferApplied(null); setOfferError(''); }}
+                  placeholder="e.g. WELCOME10"
+                  autoComplete="off"
+                />
+                <button type="button" className="btn btn-outline" onClick={handleApplyOffer} disabled={applyingOffer}>
+                  {applyingOffer ? '…' : 'Apply'}
+                </button>
+              </div>
+              {offerApplied && (
+                <p className="book-room__offer-applied">
+                  <Check size={14} aria-hidden />
+                  {offerApplied.discount_type === 'percentage'
+                    ? `${offerApplied.discount_value}% off applied`
+                    : `${formatCurrency(offerApplied.discount_value)} off applied`}
+                </p>
+              )}
+              {offerError && <p className="form-error">{offerError}</p>}
+            </div>
             <LegalAcceptance
               id="book-room-legal-acceptance"
               checked={acceptedTerms}
@@ -520,7 +594,7 @@ export default function BookRoom() {
             <div className="book-room__summary-row book-room__summary-row--editable">
               <div className="book-room__summary-row-text">
                 <span className="book-room__summary-label">Guests</span>
-                <strong>{guests} guest{guests !== 1 ? 's' : ''}</strong>
+                <strong>{guestsSummaryLabel}</strong>
               </div>
               <button
                 type="button"
@@ -530,10 +604,10 @@ export default function BookRoom() {
                 Change
               </button>
             </div>
-            {room.room_number && (
+            {selectedRoomLabel && (
               <div className="book-room__summary-row">
-                <span>Room</span>
-                <strong>{room.room_number}</strong>
+                <span>Room{activeRoomIds.length > 1 ? 's' : ''}</span>
+                <strong>{selectedRoomLabel}</strong>
               </div>
             )}
           </div>
@@ -559,12 +633,12 @@ export default function BookRoom() {
         title="Confirm your booking?"
         message={
           pricing
-            ? `Book Room ${room.room_number || '—'} for ${formatCurrency(pricing.total_price)} incl. GST?${
+            ? `Book Room${activeRoomIds.length > 1 ? 's' : ''} ${selectedRoomLabel} for ${formatCurrency(pricing.total_price)} incl. GST?${
               guestVerification.bookingFor === 'other'
                 ? ` Checking in: ${guestVerification.stayingGuestName}.`
                 : ''
             }`
-            : `Confirm booking for Room ${room.room_number || room.title}?`
+            : `Confirm booking for Room${activeRoomIds.length > 1 ? 's' : ''} ${selectedRoomLabel || room.title}?`
         }
         confirmLabel="Yes, book now"
         cancelLabel="Go back"

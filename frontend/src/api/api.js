@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'stayease_token';
+const LEGACY_TOKEN_KEY = 'stayease-token';
 const USER_KEY = 'stayease_user';
+const LEGACY_USER_KEY = 'stayease-user';
 
 export { API_BASE_URL, TOKEN_KEY, USER_KEY };
 
@@ -13,14 +15,16 @@ export const api = axios.create({
 });
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem('stayease-token');
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
 export function setToken(token) {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(LEGACY_TOKEN_KEY, token);
   } else {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
   }
 }
 
@@ -43,7 +47,9 @@ export function setStoredUser(user) {
 
 export function clearAuthStorage() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(LEGACY_USER_KEY);
 }
 
 export function normalizeError(error) {
@@ -164,6 +170,7 @@ export const roomsApi = {
 
 export const bookingsApi = {
   create: (data) => api.post('/api/bookings', data),
+  createBatch: (data) => api.post('/api/bookings/batch', data),
   uploadVerification: (file) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -179,6 +186,8 @@ export const bookingsApi = {
   pay: (id) => api.post(`/api/bookings/${id}/pay`),
   receipt: (id) => api.get(`/api/bookings/${id}/receipt`),
   invoice: (id) => api.get(`/api/bookings/${id}/invoice`),
+  downloadVoucherPdf: (id) => api.get(`/api/bookings/${id}/voucher/pdf`, { responseType: 'blob' }),
+  downloadTaxInvoicePdf: (id) => api.get(`/api/bookings/${id}/tax-invoice/pdf`, { responseType: 'blob' }),
 };
 
 export const reviewsApi = {
@@ -211,6 +220,7 @@ export const analyticsApi = {
   guestDashboard: () => api.get('/api/guest/dashboard'),
   hostDashboard: (params) => api.get('/api/dashboard', { params }),
   dashboard: (params) => api.get('/api/dashboard', { params }),
+  occupancy: (year) => api.get('/api/analytics/occupancy', { params: { year } }),
 };
 
 export const waitlistApi = {
@@ -263,6 +273,15 @@ export function formatCurrency(amount) {
   }).format(amount ?? 0);
 }
 
+export function downloadBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export function roomId(room) {
   return room?._id || room?.id;
 }
@@ -299,6 +318,7 @@ export const createOffer = (data) => api.post('/api/offers', data).then((r) => r
 export const deleteOffer = (id) => api.delete(`/api/offers/${id}`).then((r) => r.data);
 
 export const fetchDashboard = (params) => api.get('/api/dashboard', { params }).then((r) => r.data);
+export const fetchAnalytics = (year) => api.get('/api/analytics/occupancy', { params: { year } }).then((r) => r.data);
 
 export const joinWaitlist = (data) => api.post('/api/waitlist', data).then((r) => r.data);
 export const checkWaitlist = (phone) => api.get(`/api/waitlist/${phone}`).then((r) => r.data);

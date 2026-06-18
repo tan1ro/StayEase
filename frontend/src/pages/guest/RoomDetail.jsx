@@ -11,6 +11,7 @@ import {
   Calendar,
   Flag,
   ChevronRight,
+  MapPin,
   Wifi,
   UtensilsCrossed,
   Car,
@@ -42,6 +43,8 @@ import ImageLightbox from '../../components/ImageLightbox';
 import ListingLocationMap from '../../components/ListingLocationMap';
 import Spinner from '../../components/Spinner';
 import { attractionsApi, reviewsApi, roomsApi, wishlistApi, formatCurrency } from '../../api/api';
+import WeatherWidget from '../../components/WeatherWidget';
+import { HostTabs } from '../../components/host/HostPageLayout';
 import { getAvatarUrl } from '../../utils/roomImages';
 import SafeImage from '../../components/SafeImage';
 import { useAuth } from '../../context/AuthContext';
@@ -94,6 +97,32 @@ function buildSleepCards(room, roomId) {
   }
 
   return cards;
+}
+
+const ATTRACTION_TABS = [
+  { id: 'food', label: 'Food' },
+  { id: 'temples', label: 'Temples' },
+  { id: 'parks', label: 'Parks' },
+  { id: 'shopping', label: 'Shopping' },
+  { id: 'transport', label: 'Transport' },
+];
+
+function matchesAttractionCategory(item, tabId) {
+  const category = String(item.category || '').toLowerCase();
+  const aliases = {
+    food: ['food', 'restaurant', 'dining', 'cafe'],
+    temples: ['temple', 'temples', 'religious', 'worship'],
+    parks: ['park', 'parks', 'garden', 'nature'],
+    shopping: ['shopping', 'market', 'mall', 'retail'],
+    transport: ['transport', 'metro', 'station', 'transit', 'bus'],
+  };
+  return (aliases[tabId] || [tabId]).some((needle) => category.includes(needle));
+}
+
+function averageRating(reviews) {
+  if (!reviews?.length) return 0;
+  const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+  return sum / reviews.length;
 }
 
 function hasAmenity(amenities, names) {
@@ -184,6 +213,10 @@ export default function RoomDetail({ hostPreview = false }) {
     total_reviews: 0,
   });
   const [attractions, setAttractions] = useState([]);
+  const [attractionFilter, setAttractionFilter] = useState('food');
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
@@ -248,44 +281,59 @@ export default function RoomDetail({ hostPreview = false }) {
         const { data: roomData } = await roomsApi.get(id);
         setRoom(roomData);
         setSaved(user?.wishlist?.includes(id));
-        const [propRes, attrRes] = await Promise.all([
-          reviewsApi.byProperty(id).catch(() => ({
-            data: { reviews: [], avg_rating: 0, total_reviews: 0, property_name: '' },
-          })),
-          attractionsApi.byCity(roomData.location?.city || 'Bangalore').catch(() => ({ data: [] })),
+
+        const city = roomData.location?.city || 'Bangalore';
+        const lat = roomData.location?.lat ?? roomData.location?.latitude;
+        const lng = roomData.location?.lng ?? roomData.location?.longitude;
+
+        setWeatherLoading(Boolean(lat != null && lng != null));
+        setWeatherError('');
+
+        const [reviewsRes, attrRes, weatherRes] = await Promise.all([
+          reviewsApi.byRoom(id).catch(() => ({ data: [] })),
+          attractionsApi.byCity(city).catch(() => ({ data: [] })),
+          lat != null && lng != null
+            ? attractionsApi.weather(lat, lng).catch((err) => {
+                setWeatherError(err.normalized?.message || 'Weather unavailable');
+                return { data: null };
+              })
+            : Promise.resolve({ data: null }),
         ]);
-        const propertyData = propRes.data || {};
+
+        const roomReviews = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
+        const avg = averageRating(roomReviews);
         setPropertyReviewStats({
-          property_name: propertyData.property_name || '',
-          avg_rating: propertyData.avg_rating || 0,
-          total_reviews: propertyData.total_reviews || 0,
+          property_name: roomData.title?.split(' · ')[0] || roomData.title || '',
+          avg_rating: avg,
+          total_reviews: roomReviews.length,
         });
-        setReviews(propertyData.reviews || []);
-        setAttractions(attrRes.data);
+        setReviews(roomReviews);
+        setAttractions(attrRes.data || []);
+        setWeather(weatherRes.data);
       } catch (err) {
         setError(err.normalized?.message || 'Room not found');
       } finally {
         setLoading(false);
+        setWeatherLoading(false);
       }
     };
     load();
   }, [id, user?.wishlist]);
 
   const reloadListingReviews = async () => {
-    const [roomRes, propertyRes] = await Promise.all([
+    const [roomRes, reviewsRes] = await Promise.all([
       roomsApi.get(id),
-      reviewsApi.byProperty(id).catch(() => ({
-        data: { reviews: [], avg_rating: 0, total_reviews: 0, property_name: '' },
-      })),
+      reviewsApi.byRoom(id).catch(() => ({ data: [] })),
     ]);
-    const propertyData = propertyRes.data || {};
+    const roomReviews = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
+    const avg = averageRating(roomReviews);
     setRoom(roomRes.data);
     setPropertyReviewStats({
-      property_name: propertyData.property_name || '',
-      avg_rating: propertyData.avg_rating || 0,
-      total_reviews: propertyData.total_reviews || 0,
+      property_name: roomRes.data.title?.split(' · ')[0] || roomRes.data.title || '',
+      avg_rating: avg,
+      total_reviews: roomReviews.length,
     });
-    setReviews(propertyData.reviews || []);
+    setReviews(roomReviews);
   };
 
   useEffect(() => {
@@ -401,6 +449,13 @@ export default function RoomDetail({ hostPreview = false }) {
     [room, id],
   );
 
+  const filteredAttractions = useMemo(
+    () => attractions.filter((item) => matchesAttractionCategory(item, attractionFilter)),
+    [attractions, attractionFilter],
+  );
+
+  const visibleReviews = useMemo(() => reviews.slice(0, 3), [reviews]);
+
   if (loading) return <Spinner label="Loading room..." />;
   if (error) return <ErrorMessage message={error} />;
   if (!room) return null;
@@ -440,7 +495,6 @@ export default function RoomDetail({ hostPreview = false }) {
   ];
 
   const reviewCount = propertyReviewStats.total_reviews || reviews.length || room.total_reviews || 0;
-  const visibleReviews = reviews.slice(0, 4);
 
   const mobileBookUrl = widgetDates.checkIn && widgetDates.checkOut
     ? `/book/${id}?check_in=${widgetDates.checkIn}&check_out=${widgetDates.checkOut}&guests=${widgetDates.guests}`
@@ -636,11 +690,11 @@ export default function RoomDetail({ hostPreview = false }) {
                   {reviewNotice}
                 </p>
               )}
-              {reviewEligibility.can_review && (
+              {reviewEligibility.can_review && reviewEligibility.booking?.status === 'completed' && (
                 <div className="listing-review-cta">
-                  <p>You stayed at {propertyName} recently. Share your hotel experience to help other travellers.</p>
+                  <p>You completed your stay at {propertyName}. Share your hotel experience to help other travellers.</p>
                   <button type="button" className="listing-btn-outline" onClick={handleOpenReview}>
-                    Rate this hotel
+                    Write a Review
                   </button>
                 </div>
               )}
@@ -688,7 +742,7 @@ export default function RoomDetail({ hostPreview = false }) {
                     <ReviewCard key={r._id} review={r} compact />
                   ))}
                 </div>
-                {reviews.length > 4 && (
+                {reviews.length > 3 && (
                   <button
                     type="button"
                     className="listing-btn-outline"
@@ -713,17 +767,51 @@ export default function RoomDetail({ hostPreview = false }) {
             <p className="listing-muted">
               Location shown is approximate within the listed neighbourhood. The exact address will be provided after booking.
             </p>
+
+            {(weatherLoading || weather || weatherError) && (
+              <div style={{ marginTop: '1.25rem' }}>
+                {weatherError ? (
+                  <ErrorMessage message={weatherError} />
+                ) : (
+                  <WeatherWidget weather={weather} loading={weatherLoading} />
+                )}
+              </div>
+            )}
+
             {attractions.length > 0 && (
-              <div className="listing-nearby">
-                <h4>Neighbourhood highlights</h4>
-                <p>{attractions[0]?.description}</p>
-                {attractions.length > 1 && (
+              <div className="listing-nearby" style={{ marginTop: '1.5rem' }}>
+                <h4>Nearby attractions</h4>
+                <HostTabs
+                  tabs={ATTRACTION_TABS}
+                  active={attractionFilter}
+                  onChange={setAttractionFilter}
+                />
+                {filteredAttractions.length === 0 ? (
+                  <p className="listing-muted">No {attractionFilter} spots listed for this area yet.</p>
+                ) : (
+                  <ul className="listing-modal__attractions">
+                    {filteredAttractions.slice(0, 6).map((item) => (
+                      <li key={item._id || item.id} className="listing-modal__attraction">
+                        <Icon icon={MapPin} size={ICON.sm} />
+                        <div>
+                          <strong>{item.name}</strong>
+                          <p>{item.description}</p>
+                          <span className="listing-muted">
+                            {item.distance_km != null ? `${item.distance_km} km away` : ''}
+                            {item.open_hours ? ` · ${item.open_hours}` : ''}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {attractions.length > 6 && (
                   <button
                     type="button"
                     className="listing-show-more"
                     onClick={() => setAttractionsModalOpen(true)}
                   >
-                    Show more <Icon icon={ChevronRight} size={ICON.sm} />
+                    Show all <Icon icon={ChevronRight} size={ICON.sm} />
                   </button>
                 )}
               </div>

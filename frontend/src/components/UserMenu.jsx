@@ -6,7 +6,6 @@ import {
   Globe,
   Heart,
   HelpCircle,
-  Home,
   LogOut,
   MessageCircle,
   Plane,
@@ -65,21 +64,17 @@ export default function UserMenu() {
     { to: '/wishlist', icon: Heart, label: 'Wishlists' },
     { to: '/bookings', icon: Plane, label: 'Trips' },
     { to: '/messages', icon: MessageCircle, label: 'Messages' },
-    { to: '/profile', icon: User, label: 'Profile' },
+    { to: '/settings', icon: User, label: 'Profile' },
     { divider: true },
     { to: '/notifications', icon: Bell, label: 'Notifications' },
-    { to: canAccessHostPortal ? '/host/settings' : '/settings', icon: Settings, label: 'Account settings' },
-    { disabled: true, icon: Globe, label: 'Languages & currency (INR)' },
+    { to: '/settings#locale', icon: Globe, label: 'Languages & currency' },
+    { to: '/settings', icon: Settings, label: 'Account settings' },
     { to: '/help', icon: HelpCircle, label: 'Help Centre' },
-    { divider: true },
-    ...(canAccessHostPortal
-      ? [
-          { to: '/host', icon: Building2, label: 'Switch to host' },
-          { to: '/', icon: Home, label: 'Switch to guest' },
-        ]
-      : isAuthenticated
-        ? [{ action: handleBecomeHost, icon: Building2, label: upgrading ? 'Upgrading…' : 'Become a host', disabled: upgrading }]
-        : [{ to: '/register?as=host', icon: Building2, label: 'Become a host' }]),
+    ...(!canAccessHostPortal
+      ? isAuthenticated
+        ? [{ divider: true }, { action: handleBecomeHost, icon: Building2, label: upgrading ? 'Upgrading…' : 'Become a host', disabled: upgrading }]
+        : [{ divider: true }, { to: '/register?as=host', icon: Building2, label: 'Become a host' }]
+      : []),
     { divider: true },
     { action: () => { setOpen(false); setLogoutOpen(true); }, icon: LogOut, label: 'Log out' },
   ];

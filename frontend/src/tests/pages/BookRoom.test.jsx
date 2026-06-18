@@ -46,7 +46,7 @@ vi.mock('../../api/api', async () => {
     ...actual,
     roomsApi: { get: vi.fn(), alternatives: vi.fn().mockResolvedValue({ data: [] }) },
     pricingApi: { calculate: vi.fn() },
-    bookingsApi: { create: vi.fn(), pay: vi.fn(), uploadVerification: vi.fn() },
+    bookingsApi: { create: vi.fn(), createBatch: vi.fn(), pay: vi.fn(), uploadVerification: vi.fn() },
   };
 });
 
@@ -142,13 +142,14 @@ describe('BookRoom', () => {
     });
   });
 
-  it('offer code applied correctly', async () => {
+  it('offer code field is available at payment step', async () => {
     render(
       <MemoryRouter initialEntries={['/book/room1']}>
         <Routes><Route path="/book/:roomId" element={<BookRoom />} /></Routes>
       </MemoryRouter>,
     );
     await waitFor(() => expect(screen.getByPlaceholderText('e.g. WELCOME10')).toBeInTheDocument());
+    expect(screen.getByText(/Have a code\? Apply it here before you pay/i)).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('e.g. WELCOME10'), { target: { value: 'WELCOME10' } });
     expect(screen.getByPlaceholderText('e.g. WELCOME10')).toHaveValue('WELCOME10');
   });
@@ -172,7 +173,7 @@ describe('BookRoom', () => {
   });
 
   it('shows unavailable error on 409 response', async () => {
-    bookingsApi.create.mockRejectedValue(
+    bookingsApi.createBatch.mockRejectedValue(
       Object.assign(new Error('conflict'), {
         normalized: { status: 409, message: 'Room unavailable for selected dates' },
       }),
@@ -195,7 +196,7 @@ describe('BookRoom', () => {
     fireEvent.click(screen.getByText('Confirm Booking'));
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Yes, book now'));
-    await waitFor(() => expect(bookingsApi.create).toHaveBeenCalled());
+    await waitFor(() => expect(bookingsApi.createBatch).toHaveBeenCalled());
     await waitFor(() => {
       expect(screen.getByText(/Room unavailable for selected dates/i)).toBeInTheDocument();
     });

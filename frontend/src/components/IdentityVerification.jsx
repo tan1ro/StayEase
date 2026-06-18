@@ -73,14 +73,6 @@ export default function IdentityVerification({ verified = false, onSuccess }) {
           )}
         </form>
       </Modal>
-      <style>{`
-        .identity-verification__header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 0.75rem;
-        }
-      `}</style>
     </div>
   );
 }

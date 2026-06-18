@@ -5,7 +5,6 @@ import FilterBar, { apiParamsFromFilters, filtersFromParams } from '../../compon
 import RoomCard from '../../components/RoomCard';
 import Spinner from '../../components/Spinner';
 import ErrorMessage from '../../components/ErrorMessage';
-import OfferBanner from '../../components/OfferBanner';
 import CompareRoomsModal from '../../components/CompareRoomsModal';
 import WelcomeOfferModal from '../../components/onboarding/WelcomeOfferModal';
 import { useAuth } from '../../context/AuthContext';
@@ -139,7 +138,6 @@ export default function Home() {
   return (
     <div className="home-page">
       <WelcomeOfferModal open={showWelcomeOffer} onClose={() => { dismissWelcomeOffer(); setShowWelcomeOffer(false); }} />
-      <OfferBanner />
       <div className="home-chrome">
         <FilterBar defaultExpanded={hasActiveFilters} />
       </div>
@@ -190,22 +188,7 @@ export default function Home() {
       )}
 
       {compareIds.length > 0 && (
-        <div style={{
-          position: 'fixed',
-          bottom: 72,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 100,
-          background: 'var(--card-bg)',
-          border: '1px solid var(--border)',
-          borderRadius: 999,
-          padding: '0.75rem 1.25rem',
-          boxShadow: 'var(--shadow-md)',
-          display: 'flex',
-          gap: '0.75rem',
-          alignItems: 'center',
-        }}
-        >
+        <div className="home-compare-bar">
           <span>Compare ({compareIds.length})</span>
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setCompareOpen(true)}>
             View comparison

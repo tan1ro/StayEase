@@ -15,7 +15,7 @@ const supportLinks = [
   { to: '/find-my-room', label: 'Find My Room' },
   { to: '/wishlist', label: 'Wishlist' },
   { to: '/bookings', label: 'My bookings' },
-  { to: '/profile', label: 'Profile' },
+  { to: '/settings', label: 'Profile' },
   { to: '/terms#cancellation', label: 'Cancellation options' },
 ];
 

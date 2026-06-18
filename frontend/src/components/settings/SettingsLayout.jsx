@@ -130,17 +130,19 @@ export function SettingsRow({ label, value, description, action, onAction, to, c
     )
   );
 
+  const rowClass = `account-settings__row${description ? ' account-settings__row--described' : ''}`;
+
   return (
-    <div className="account-settings__row">
+    <div className={rowClass}>
       <div className="account-settings__row-main">
-        <strong className="account-settings__row-label">{label}</strong>
+        <span className="account-settings__row-label">{label}</span>
         {description && <p className="account-settings__row-desc">{description}</p>}
         {value != null && value !== '' && (
           <span className="account-settings__row-value">{value}</span>
         )}
         {children}
       </div>
-      {actionEl}
+      {actionEl && <div className="account-settings__row-action">{actionEl}</div>}
     </div>
   );
 }
@@ -149,10 +151,12 @@ export function SettingsLinkRow({ label, description, to, onClick }) {
   const inner = (
     <>
       <div className="account-settings__row-main">
-        <strong className="account-settings__row-label">{label}</strong>
+        <span className="account-settings__row-label">{label}</span>
         {description && <p className="account-settings__row-desc">{description}</p>}
       </div>
-      <span className="account-settings__chevron" aria-hidden="true">›</span>
+      <div className="account-settings__row-action">
+        <span className="account-settings__chevron" aria-hidden="true">›</span>
+      </div>
     </>
   );
 
@@ -173,21 +177,23 @@ export function SettingsLinkRow({ label, description, to, onClick }) {
 
 export function SettingsToggleRow({ label, description, checked, onChange, disabled }) {
   return (
-    <div className="account-settings__row account-settings__row--toggle">
+    <div className={`account-settings__row account-settings__row--toggle${description ? ' account-settings__row--described' : ''}`}>
       <div className="account-settings__row-main">
-        <strong className="account-settings__row-label">{label}</strong>
+        <span className="account-settings__row-label">{label}</span>
         {description && <p className="account-settings__row-desc">{description}</p>}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        className={`account-settings__switch${checked ? ' account-settings__switch--on' : ''}`}
-        onClick={() => onChange?.(!checked)}
-      >
-        <span className="account-settings__switch-thumb" />
-      </button>
+      <div className="account-settings__row-action">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          disabled={disabled}
+          className={`account-settings__switch${checked ? ' account-settings__switch--on' : ''}`}
+          onClick={() => onChange?.(!checked)}
+        >
+          <span className="account-settings__switch-thumb" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -220,6 +226,34 @@ export function SettingsInfoBox({ items }) {
         </div>
       ))}
     </div>
+  );
+}
+
+export function SettingsRequirements({ title, description, items }) {
+  const done = items.filter((item) => item.done).length;
+  const complete = done === items.length;
+
+  return (
+    <section className={`account-settings__requirements${complete ? ' account-settings__requirements--complete' : ''}`}>
+      <div className="account-settings__requirements-head">
+        <div>
+          <h2 className="account-settings__requirements-title">{title}</h2>
+          {description && <p className="account-settings__requirements-desc">{description}</p>}
+        </div>
+        <span className="account-settings__requirements-count">{done}/{items.length}</span>
+      </div>
+      <ul className="account-settings__requirements-list">
+        {items.map(({ id, label, done: itemDone, action, onAction }) => (
+          <li key={id} className={`account-settings__requirements-item${itemDone ? ' account-settings__requirements-item--done' : ''}`}>
+            <span className="account-settings__requirements-check" aria-hidden="true">{itemDone ? '✓' : '○'}</span>
+            <span className="account-settings__requirements-label">{label}</span>
+            {!itemDone && action && onAction && (
+              <button type="button" className="account-settings__action" onClick={onAction}>{action}</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

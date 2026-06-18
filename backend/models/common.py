@@ -46,6 +46,8 @@ def serialize_doc(doc: dict[str, Any] | None) -> dict[str, Any] | None:
         if out["_id"] is None:
             del out["_id"]
         else:
-            out["_id"] = str(out["_id"])
+            oid = str(out["_id"])
+            out["_id"] = oid
+            out["id"] = oid
     return out
 

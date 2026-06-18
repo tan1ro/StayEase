@@ -48,30 +48,6 @@ export default function PriceBreakdown({ pricing, compact = false }) {
         <strong>Grand total</strong>
         <strong data-testid="grand-total">{formatCurrency(grandTotal)}</strong>
       </div>
-      <style>{`
-        .price-breakdown {
-          border-top: 1px solid var(--border);
-          padding-top: 1rem;
-          margin-top: 1rem;
-        }
-        .price-breakdown--compact {
-          font-size: 0.85rem;
-        }
-        .price-breakdown__row {
-          display: flex;
-          justify-content: space-between;
-          padding: 0.35rem 0;
-          color: var(--text-secondary);
-        }
-        .price-breakdown__row--total {
-          border-top: 1px solid var(--border);
-          margin-top: 0.5rem;
-          padding-top: 0.75rem;
-          color: var(--text-primary);
-          font-size: 1.05rem;
-        }
-        .price-breakdown__discount { color: var(--success); }
-      `}</style>
     </div>
   );
 }

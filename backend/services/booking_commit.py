@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
+from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ from database import database
 from models.booking import CheckInVerification
 from models.common import utc_now
 from services.availability import blocked_dates_conflict
+from services.room_adjacency import validate_adjacent_room_selection
 from services.waitlist import find_conflicting_booking, promote_waitlist_on_cancel
 
 
@@ -43,6 +45,8 @@ async def commit_booking(
     offer_code: str | None,
     preferred_room_number: str | None = None,
     room_preference_notes: str | None = None,
+    booking_group_id: str | None = None,
+    linked_room_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     credit_used = float(pricing.get("referral_credit_used", 0))
     offer_applied = offer is not None and pricing.get("discount_amount", 0) > 0
@@ -81,6 +85,8 @@ async def commit_booking(
         "host_message": host_message,
         "preferred_room_number": preferred_room_number,
         "room_preference_notes": room_preference_notes,
+        "booking_group_id": booking_group_id,
+        "linked_room_ids": linked_room_ids or [],
         "created_at": utc_now(),
     }
 
@@ -134,6 +140,78 @@ async def commit_booking(
         raise HTTPException(status_code=422, detail={"offer_code": "Offer usage limit reached"}) from None
     except InsufficientReferralCreditsError:
         raise HTTPException(status_code=422, detail={"referral_credits": "Insufficient referral credits"}) from None
+
+
+async def commit_bookings_batch(
+    *,
+    rooms: list[dict[str, Any]],
+    property_rooms: list[dict[str, Any]],
+    check_in: date,
+    check_out: date,
+    num_guests: int,
+    booking_for: str,
+    user: dict[str, Any],
+    offer: dict[str, Any] | None,
+    pricing_by_room_id: dict[str, dict[str, Any]],
+    check_in_verification: CheckInVerification,
+    staying_guest_name: str,
+    persist_identity: dict | None,
+    host_message: str | None,
+    offer_code: str | None,
+    room_preference_notes: str | None = None,
+) -> list[dict[str, Any]]:
+    try:
+        validate_adjacent_room_selection(rooms, property_rooms)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"room_ids": str(exc)}) from exc
+
+    host_ids = {room.get("host_id") for room in rooms}
+    cities = {room.get("location", {}).get("city") for room in rooms}
+    if len(host_ids) != 1 or None in host_ids:
+        raise HTTPException(status_code=422, detail={"room_ids": "All rooms must belong to the same host"})
+    if len(cities) != 1 or not next(iter(cities)):
+        raise HTTPException(status_code=422, detail={"room_ids": "All rooms must be at the same property"})
+
+    group_id = str(uuid4())
+    linked_ids = [str(room["_id"]) for room in rooms]
+    created_bookings: list[dict[str, Any]] = []
+    identity_persisted = False
+
+    for index, room in enumerate(rooms):
+        room_id = str(room["_id"])
+        pricing = pricing_by_room_id.get(room_id)
+        if not pricing:
+            raise HTTPException(status_code=422, detail={"room_ids": f"Missing pricing for room {room_id}"})
+
+        batch_user = dict(user)
+        if index > 0:
+            batch_user = {**user, "referral_credits": 0.0}
+
+        booking = await commit_booking(
+            room_id=room_id,
+            check_in=check_in,
+            check_out=check_out,
+            num_guests=num_guests,
+            booking_for=booking_for,
+            room=room,
+            user=batch_user,
+            offer=offer if index == 0 else None,
+            pricing=pricing,
+            check_in_verification=check_in_verification,
+            staying_guest_name=staying_guest_name,
+            persist_identity=persist_identity if not identity_persisted else None,
+            host_message=host_message,
+            offer_code=offer_code if index == 0 else None,
+            preferred_room_number=room.get("room_number"),
+            room_preference_notes=room_preference_notes,
+            booking_group_id=group_id,
+            linked_room_ids=linked_ids,
+        )
+        if persist_identity and not identity_persisted:
+            identity_persisted = True
+        created_bookings.append(booking)
+
+    return created_bookings
 
 
 async def commit_payment(

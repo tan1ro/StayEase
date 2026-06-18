@@ -4,19 +4,21 @@ from datetime import date
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from database import database
-from models.booking import BookingCreate, BookingIdentityProof, CheckInVerification
+from database import get_database
+from models.booking import BookingBatchCreate, BookingCreate, BookingIdentityProof, CheckInVerification
 from models.common import serialize_doc, utc_now
 from models.user import IdentityProof
 from services.auth import get_current_user, require_role
 from services.roles import is_host_role, is_tourist_role, normalize_role
 from services.email import send_template_email
-from services.invoice import generate_invoice_pdf
+from services.invoice import generate_invoice_pdf, generate_tax_invoice_pdf
 from services.cloudinary import upload_image, upload_pdf
 from services.pricing import calculate_dynamic_pricing
 from services.cancellation import calculate_cancellation
-from services.booking_commit import commit_booking, commit_cancellation, commit_payment
+from services.booking_commit import commit_booking, commit_bookings_batch, commit_cancellation, commit_payment
 from services.waitlist import find_conflicting_booking
 from services.availability import blocked_dates_conflict
 from services.whatsapp import booking_confirmation_message, send_whatsapp
@@ -80,10 +82,10 @@ async def upload_verification_document(
     return {"url": uploaded["url"], "public_id": uploaded.get("public_id")}
 
 
-async def _get_offer(code: str | None, room_id: str):
+async def _get_offer(code: str | None, room_id: str, db: AsyncIOMotorDatabase):
     if not code:
         return None
-    offers = database.collection("offers")
+    offers = db["offers"]
     offer = await offers.find_one({"code": code.upper(), "is_active": True})
     if not offer:
         raise HTTPException(status_code=422, detail={"offer_code": "Invalid offer code"})
@@ -99,13 +101,17 @@ async def _get_offer(code: str | None, room_id: str):
 
 
 @router.post("", status_code=201)
-async def create_booking(payload: BookingCreate, user: dict = Depends(require_role("tourist", "host", "admin"))):
+async def create_booking(
+    payload: BookingCreate,
+    user: dict = Depends(require_role("tourist", "host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     if payload.check_in_date < date.today():
         raise HTTPException(status_code=422, detail={"check_in_date": "Cannot book past dates"})
     if payload.check_out_date <= payload.check_in_date:
         raise HTTPException(status_code=422, detail={"check_out_date": "Check-out must be after check-in"})
 
-    rooms = database.collection("rooms")
+    rooms = db["rooms"]
     if not ObjectId.is_valid(payload.room_id):
         raise HTTPException(status_code=404, detail="Room not found")
     room = await rooms.find_one({"_id": ObjectId(payload.room_id)})
@@ -127,7 +133,7 @@ async def create_booking(payload: BookingCreate, user: dict = Depends(require_ro
             detail={"message": "Room unavailable for selected dates"},
         )
 
-    offer = await _get_offer(payload.offer_code, payload.room_id)
+    offer = await _get_offer(payload.offer_code, payload.room_id, db)
     pricing = calculate_dynamic_pricing(
         base_price=room["price_per_night"],
         check_in=payload.check_in_date,
@@ -169,6 +175,107 @@ async def create_booking(payload: BookingCreate, user: dict = Depends(require_ro
     return booking_ser
 
 
+@router.post("/batch", status_code=201)
+async def create_bookings_batch(
+    payload: BookingBatchCreate,
+    user: dict = Depends(require_role("tourist", "host", "admin")),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    if payload.check_in_date < date.today():
+        raise HTTPException(status_code=422, detail={"check_in_date": "Cannot book past dates"})
+    if payload.check_out_date <= payload.check_in_date:
+        raise HTTPException(status_code=422, detail={"check_out_date": "Check-out must be after check-in"})
+
+    rooms_coll = db["rooms"]
+    valid_ids = [rid for rid in payload.room_ids if ObjectId.is_valid(rid)]
+    if len(valid_ids) != len(payload.room_ids):
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room_docs = await rooms_coll.find({"_id": {"$in": [ObjectId(rid) for rid in valid_ids]}}).to_list(len(valid_ids))
+    room_by_id = {str(room["_id"]): room for room in room_docs}
+    if len(room_by_id) != len(payload.room_ids):
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    ordered_rooms = [room_by_id[rid] for rid in payload.room_ids]
+    property_rooms = await rooms_coll.find({
+        "host_id": ordered_rooms[0]["host_id"],
+        "location.city": ordered_rooms[0].get("location", {}).get("city"),
+    }).sort("room_number", 1).to_list(100)
+
+    for room in ordered_rooms:
+        room_id = str(room["_id"])
+        conflict = await find_conflicting_booking(room_id, payload.check_in_date, payload.check_out_date)
+        if conflict:
+            raise HTTPException(status_code=409, detail={"message": "Room unavailable for selected dates"})
+        if blocked_dates_conflict(room.get("blocked_dates"), payload.check_in_date, payload.check_out_date):
+            raise HTTPException(status_code=409, detail={"message": "Room unavailable for selected dates"})
+
+    pricing_by_room_id: dict[str, dict] = {}
+    primary_offer = None
+    for index, room in enumerate(ordered_rooms):
+        room_id = str(room["_id"])
+        offer = await _get_offer(payload.offer_code, room_id, db) if index == 0 and payload.offer_code else None
+        if index == 0:
+            primary_offer = offer
+        pricing_by_room_id[room_id] = calculate_dynamic_pricing(
+            base_price=room["price_per_night"],
+            check_in=payload.check_in_date,
+            check_out=payload.check_out_date,
+            offer=offer,
+            referral_credits=float(user.get("referral_credits", 0)) if index == 0 else 0.0,
+        )
+
+    verification_payload = BookingCreate(
+        room_id=payload.room_ids[0],
+        check_in_date=payload.check_in_date,
+        check_out_date=payload.check_out_date,
+        num_guests=payload.num_guests,
+        offer_code=payload.offer_code,
+        booking_for=payload.booking_for,
+        staying_guest_name=payload.staying_guest_name,
+        staying_guest_phone=payload.staying_guest_phone,
+        guest_photo_url=payload.guest_photo_url,
+        identity_proof=payload.identity_proof,
+        host_message=payload.host_message,
+        room_preference_notes=payload.room_preference_notes,
+    )
+    check_in_verification, staying_guest_name, persist_identity = _build_check_in_verification(verification_payload, user)
+
+    created = await commit_bookings_batch(
+        rooms=ordered_rooms,
+        property_rooms=property_rooms,
+        check_in=payload.check_in_date,
+        check_out=payload.check_out_date,
+        num_guests=payload.num_guests,
+        booking_for=payload.booking_for,
+        user=user,
+        offer=primary_offer,
+        pricing_by_room_id=pricing_by_room_id,
+        check_in_verification=check_in_verification,
+        staying_guest_name=staying_guest_name,
+        persist_identity=persist_identity,
+        host_message=payload.host_message,
+        offer_code=payload.offer_code,
+        room_preference_notes=payload.room_preference_notes,
+    )
+
+    serialized = [serialize_doc(booking) for booking in created]
+    for booking_ser, room in zip(serialized, ordered_rooms, strict=True):
+        await send_template_email(
+            to=user["email"],
+            subject="StayEase booking confirmation",
+            template_name="booking_confirmation.html",
+            context={"booking": booking_ser, "room": serialize_doc(room)},
+        )
+        send_whatsapp(user["phone"], booking_confirmation_message(booking_ser, room))
+
+    return {
+        "booking_group_id": serialized[0].get("booking_group_id"),
+        "bookings": serialized,
+        "total_price": sum(item.get("total_price", 0) for item in serialized),
+    }
+
+
 @router.get("")
 async def list_bookings(
     status_filter: str | None = None,
@@ -176,6 +283,7 @@ async def list_bookings(
     host_id: str | None = None,
     scope: str | None = None,
     user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ):
     q: dict = {}
     role = normalize_role(user.get("role"))
@@ -190,7 +298,7 @@ async def list_bookings(
     elif scope == "hosting" or (scope is None and role == "host" and "guest_id" not in q):
         q["host_id"] = str(user["_id"])
 
-    items = await database.collection("bookings").find(q).sort("created_at", -1).to_list(200)
+    items = await db["bookings"].find(q).sort("created_at", -1).to_list(200)
     if not items:
         return []
 
@@ -198,9 +306,9 @@ async def list_bookings(
     room_ids = list({item["room_id"] for item in items if item.get("room_id")})
     valid_room_ids = [ObjectId(rid) for rid in room_ids if ObjectId.is_valid(rid)]
 
-    reviews = await database.collection("reviews").find({"booking_id": {"$in": booking_ids}}).to_list(len(booking_ids))
+    reviews = await db["reviews"].find({"booking_id": {"$in": booking_ids}}).to_list(len(booking_ids))
     rooms = (
-        await database.collection("rooms").find({"_id": {"$in": valid_room_ids}}).to_list(len(valid_room_ids))
+        await db["rooms"].find({"_id": {"$in": valid_room_ids}}).to_list(len(valid_room_ids))
         if valid_room_ids
         else []
     )
@@ -219,8 +327,12 @@ async def list_bookings(
 
 
 @router.get("/room/{id}")
-async def get_bookings_by_room(id: str, user: dict = Depends(get_current_user)):
-    room = await database.collection("rooms").find_one({"_id": ObjectId(id)}) if ObjectId.is_valid(id) else None
+async def get_bookings_by_room(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    room = await db["rooms"].find_one({"_id": ObjectId(id)}) if ObjectId.is_valid(id) else None
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if is_tourist_role(user.get("role")):
@@ -229,7 +341,7 @@ async def get_bookings_by_room(id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     items = (
-        await database.collection("bookings")
+        await db["bookings"]
         .find({"room_id": id})
         .sort("created_at", -1)
         .to_list(200)
@@ -238,8 +350,12 @@ async def get_bookings_by_room(id: str, user: dict = Depends(get_current_user)):
 
 
 @router.get("/{id}/cancellation-preview")
-async def cancellation_preview(id: str, user: dict = Depends(get_current_user)):
-    booking = await _get_booking_or_404(id, user)
+async def cancellation_preview(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    booking = await _get_booking_or_404(id, user, db)
     if booking["status"] == "cancelled":
         raise HTTPException(status_code=409, detail="Booking already cancelled")
     breakdown = calculate_cancellation(
@@ -251,10 +367,10 @@ async def cancellation_preview(id: str, user: dict = Depends(get_current_user)):
     return breakdown
 
 
-async def _get_booking_or_404(id: str, user: dict) -> dict:
+async def _get_booking_or_404(id: str, user: dict, db: AsyncIOMotorDatabase) -> dict:
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Booking not found")
-    booking = await database.collection("bookings").find_one({"_id": ObjectId(id)})
+    booking = await db["bookings"].find_one({"_id": ObjectId(id)})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     role = normalize_role(user.get("role"))
@@ -266,20 +382,28 @@ async def _get_booking_or_404(id: str, user: dict) -> dict:
 
 
 @router.get("/{id}")
-async def get_booking(id: str, user: dict = Depends(get_current_user)):
-    booking = await _get_booking_or_404(id, user)
+async def get_booking(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    booking = await _get_booking_or_404(id, user, db)
     serialized = serialize_doc(booking)
-    review = await database.collection("reviews").find_one({"booking_id": id})
+    review = await db["reviews"].find_one({"booking_id": id})
     serialized["has_review"] = review is not None
     serialized["can_review"] = is_booking_reviewable(booking) and review is None
-    room = await database.collection("rooms").find_one({"_id": ObjectId(booking["room_id"])}) if ObjectId.is_valid(booking.get("room_id", "")) else None
+    room = await db["rooms"].find_one({"_id": ObjectId(booking["room_id"])}) if ObjectId.is_valid(booking.get("room_id", "")) else None
     serialized["room_title"] = room.get("title", "") if room else ""
     return serialized
 
 
 @router.delete("/{id}")
-async def cancel_booking(id: str, user: dict = Depends(get_current_user)):
-    booking = await _get_booking_or_404(id, user)
+async def cancel_booking(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    booking = await _get_booking_or_404(id, user, db)
     if booking["guest_id"] != str(user["_id"]) and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -328,10 +452,14 @@ async def cancel_booking(id: str, user: dict = Depends(get_current_user)):
 
 
 @router.post("/{id}/pay")
-async def pay_booking(id: str, user: dict = Depends(get_current_user)):
+async def pay_booking(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=404, detail="Booking not found")
-    booking = await database.collection("bookings").find_one({"_id": ObjectId(id)})
+    booking = await db["bookings"].find_one({"_id": ObjectId(id)})
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking["guest_id"] != str(user["_id"]) and user["role"] != "admin":
@@ -339,8 +467,8 @@ async def pay_booking(id: str, user: dict = Depends(get_current_user)):
     if booking["payment_status"] == "paid":
         return serialize_doc(booking)
 
-    room = await database.collection("rooms").find_one({"_id": ObjectId(booking["room_id"])})
-    host = await database.collection("users").find_one({"_id": ObjectId(room["host_id"])})
+    room = await db["rooms"].find_one({"_id": ObjectId(booking["room_id"])})
+    host = await db["users"].find_one({"_id": ObjectId(room["host_id"])})
     guest = user
 
     invoice_number = f"INV-{booking['check_in_date'].replace('-', '')}-{str(booking['_id'])[-6:]}"
@@ -402,13 +530,97 @@ async def pay_booking(id: str, user: dict = Depends(get_current_user)):
 
 
 @router.get("/{id}/receipt")
-async def get_receipt(id: str, user: dict = Depends(get_current_user)):
-    return await get_booking(id, user)
+async def get_receipt(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    return await get_booking(id, user, db)
 
 
 @router.get("/{id}/invoice")
-async def get_booking_invoice(id: str, user: dict = Depends(get_current_user)):
-    invoice = await database.collection("invoices").find_one({"booking_id": id})
+async def get_booking_invoice(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    invoice = await db["invoices"].find_one({"booking_id": id})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return serialize_doc(invoice)
+
+
+async def _pdf_context(id: str, user: dict, db: AsyncIOMotorDatabase):
+    booking = await _get_booking_or_404(id, user, db)
+    if booking.get("payment_status") != "paid":
+        raise HTTPException(status_code=400, detail="Invoice available after payment")
+    room = await db["rooms"].find_one({"_id": ObjectId(booking["room_id"])})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    host = await db["users"].find_one({"_id": ObjectId(room["host_id"])})
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+    invoice = await db["invoices"].find_one({"booking_id": id})
+    invoice_number = (
+        invoice.get("invoice_number")
+        if invoice
+        else f"INV-{booking['check_in_date'].replace('-', '')}-{str(booking['_id'])[-6:]}"
+    )
+    pricing = {
+        "price_breakdown": booking.get("price_breakdown", []),
+        "gst_breakdown": {
+            "cgst_rate": booking.get("gst_rate", 0) / 2,
+            "cgst_amount": booking.get("gst_amount", 0) / 2,
+            "sgst_rate": booking.get("gst_rate", 0) / 2,
+            "sgst_amount": booking.get("gst_amount", 0) / 2,
+        },
+        "guest_platform_fee": booking.get("guest_platform_fee", 0),
+        "total_price": booking.get("total_price", 0),
+    }
+    return booking, room, host, user, invoice_number, pricing
+
+
+@router.get("/{id}/voucher/pdf")
+async def download_voucher_pdf(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    booking, room, host, guest, invoice_number, pricing = await _pdf_context(id, user, db)
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=invoice_number,
+        booking=booking,
+        room=room,
+        guest=guest,
+        host=host,
+        pricing=pricing,
+    )
+    filename = f"StayEase-Voucher-{invoice_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{id}/tax-invoice/pdf")
+async def download_tax_invoice_pdf(
+    id: str,
+    user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    booking, room, host, guest, invoice_number, pricing = await _pdf_context(id, user, db)
+    pdf_bytes = generate_tax_invoice_pdf(
+        invoice_number=invoice_number,
+        booking=booking,
+        room=room,
+        guest=guest,
+        host=host,
+        pricing=pricing,
+    )
+    filename = f"StayEase-Tax-Invoice-{invoice_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

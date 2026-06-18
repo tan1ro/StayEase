@@ -244,7 +244,7 @@ def resolve_chat_intent(message: str, context: dict[str, Any] | None = None) -> 
     if _contains_any(text, "profile", "my account", "account"):
         if not context.get("is_authenticated"):
             return _navigation_reply("login", "/login", "Sign in to access your StayEase profile.", context)
-        return _navigation_reply("profile", "/profile", "View and edit your profile details here.", context)
+        return _navigation_reply("profile", "/settings", "View and edit your profile details here.", context)
 
     if _contains_any(text, "setting", "password", "notification pref"):
         if not context.get("is_authenticated"):

@@ -376,3 +376,32 @@ async def host_dashboard(
     user: dict = Depends(require_role("host", "admin")),
 ):
     return await _host_stats_dashboard(str(user["_id"]), year=year)
+
+
+@router.get("/analytics/occupancy")
+async def occupancy_analytics(
+    year: int | None = None,
+    user: dict = Depends(require_role("host", "admin")),
+):
+    yr = _parse_year(year)
+    data = await _host_year_analytics(str(user["_id"]), yr)
+    return {
+        "year": yr,
+        "monthly_occupancy": data["monthly_occupancy"],
+        "monthly_revenue": [
+            {"month": m["month"], "revenue": m["revenue"]}
+            for m in data["monthly_revenue"]
+        ],
+        "room_type_distribution": data["room_type_distribution"],
+        "top_rooms": [
+            {
+                "room_number": r.get("room_number", ""),
+                "title": r.get("title", ""),
+                "bookings": r.get("bookings", 0),
+                "revenue": r.get("revenue", 0),
+            }
+            for r in data["top_rooms"]
+        ],
+        "avg_stay_nights": data["avg_stay_nights"],
+        "busiest_day": data["busiest_day"],
+    }

@@ -208,9 +208,14 @@ export default function FilterBar({ onChange, defaultExpanded = false }) {
         </div>
 
         {activeCount > 0 && (
-          <button type="button" className="filter-toolbar__clear hide-mobile" onClick={clearAll} data-testid="clear-filters">
-            Clear all
-          </button>
+          <>
+            <button type="button" className="filter-toolbar__clear hide-mobile" onClick={clearAll} data-testid="clear-filters">
+              Clear all
+            </button>
+            <button type="button" className="filter-toolbar__clear filter-toolbar__clear--mobile" onClick={clearAll}>
+              Clear all
+            </button>
+          </>
         )}
       </div>
 

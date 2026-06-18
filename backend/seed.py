@@ -33,7 +33,7 @@ ROOMS = [
     {
         "room_number": "101",
         "title": "Mountain View Single — Sunrise",
-        "description": "East-facing single with mountain views and morning golden light — ideal for early risers.",
+        "description": "East-facing single with mountain views and morning golden light.",
         "room_category": "Single",
         "bed_configuration": "single_bed",
         "price_per_night": 850.0,
@@ -50,7 +50,7 @@ ROOMS = [
     {
         "room_number": "102",
         "title": "Garden Double — Soft Light",
-        "description": "North-facing garden room with cooler afternoon shade and a quiet patio outlook.",
+        "description": "North-facing garden room with cooler afternoon shade.",
         "room_category": "Double",
         "bed_configuration": "double_bed",
         "price_per_night": 750.0,
@@ -67,7 +67,7 @@ ROOMS = [
     {
         "room_number": "201",
         "title": "Premium Mountain Suite",
-        "description": "South-facing suite with panoramic mountain views and all-day sunlight.",
+        "description": "South-facing suite with panoramic mountain views.",
         "room_category": "Suite",
         "bed_configuration": "king",
         "price_per_night": 1200.0,
@@ -84,7 +84,7 @@ ROOMS = [
     {
         "room_number": "202",
         "title": "City View Double — Sunset",
-        "description": "West-facing double with skyline views and golden-hour sunsets from the balcony.",
+        "description": "West-facing double with skyline views and golden-hour sunsets.",
         "room_category": "Double",
         "bed_configuration": "queen",
         "price_per_night": 950.0,
@@ -99,26 +99,9 @@ ROOMS = [
         "has_balcony": True,
     },
     {
-        "room_number": "301",
-        "title": "Garden Triple — Sunrise",
-        "description": "Family triple on the top floor with garden views and east-facing morning light.",
-        "room_category": "Triple",
-        "bed_configuration": "twin_beds",
-        "price_per_night": 1100.0,
-        "amenities": ["WiFi", "AC", "TV", "Parking"],
-        "max_guests": 4,
-        "location": {**HILL_RESORT},
-        "food_preference": "both",
-        "smoking_policy": "non_smoking",
-        "alcohol_policy": "non_alcohol",
-        "view_type": "garden_view",
-        "facing_side": "east",
-        "has_balcony": False,
-    },
-    {
         "room_number": "401",
         "title": "Beach View Double — Sunset",
-        "description": "West-facing beach-side double steps from the sand with sunset views from the balcony.",
+        "description": "West-facing beach-side double steps from the sand.",
         "room_category": "Double",
         "bed_configuration": "queen",
         "price_per_night": 1800.0,
@@ -133,48 +116,11 @@ ROOMS = [
         "view_description": "Direct beach access with sunset over the Arabian Sea.",
         "has_balcony": True,
     },
-    {
-        "room_number": "402",
-        "title": "Sea View Single — Sunrise",
-        "description": "East-facing single room on the beach side with sunrise over the sea.",
-        "room_category": "Single",
-        "bed_configuration": "single_bed",
-        "price_per_night": 1400.0,
-        "amenities": ["WiFi", "AC", "Beach Access"],
-        "max_guests": 2,
-        "location": {**BEACH_RESORT},
-        "food_preference": "veg",
-        "smoking_policy": "non_smoking",
-        "alcohol_policy": "non_alcohol",
-        "view_type": "sea_view",
-        "facing_side": "east",
-        "view_description": "Wake up to sunrise over the Arabian Sea.",
-        "has_balcony": True,
-    },
-    {
-        "room_number": "403",
-        "title": "Beachfront Suite — Sunset",
-        "description": "Premium beachfront suite with panoramic sea views and private sunset terrace.",
-        "room_category": "Suite",
-        "bed_configuration": "king",
-        "price_per_night": 3200.0,
-        "amenities": ["WiFi", "AC", "Beach Access", "Mini Bar", "Room Service", "Breakfast"],
-        "max_guests": 4,
-        "location": {**BEACH_RESORT},
-        "food_preference": "both",
-        "smoking_policy": "non_smoking",
-        "alcohol_policy": "alcohol",
-        "view_type": "beach_view",
-        "facing_side": "west",
-        "view_description": "Front-row beach view with sunset golden hour on the terrace.",
-        "has_balcony": True,
-    },
 ]
 
 OFFERS = [
     {
         "code": "WELCOME10",
-        "host_id": None,
         "type": "percentage",
         "value": 10.0,
         "min_booking_amount": 1000.0,
@@ -200,24 +146,6 @@ DEFAULT_POLICIES = {
     "alcohol_allowed": False,
 }
 
-SYNC_FIELDS = (
-    "title",
-    "description",
-    "room_category",
-    "bed_configuration",
-    "price_per_night",
-    "amenities",
-    "max_guests",
-    "location",
-    "food_preference",
-    "smoking_policy",
-    "alcohol_policy",
-    "view_type",
-    "facing_side",
-    "view_description",
-    "has_balcony",
-)
-
 
 async def _ensure_user(users, *, email: str, doc: dict) -> tuple[dict, bool]:
     existing = await users.find_one({"email": email})
@@ -238,12 +166,7 @@ async def _ensure_user(users, *, email: str, doc: dict) -> tuple[dict, bool]:
 async def _ensure_room(rooms, *, host_id: str, spec: dict) -> tuple[str, bool]:
     existing = await rooms.find_one({"host_id": host_id, "room_number": spec["room_number"]})
     if existing:
-        updates = {key: spec[key] for key in SYNC_FIELDS if key in spec}
-        if updates:
-            await rooms.update_one({"_id": existing["_id"]}, {"$set": updates})
-            print(f"SYNC room {spec['room_number']} — {spec['title']}")
-        else:
-            print(f"SKIP room {spec['room_number']} (already exists)")
+        print(f"SKIP room {spec['room_number']} — {spec['title']} (already exists)")
         return str(existing["_id"]), False
     doc = {
         **spec,
@@ -269,7 +192,7 @@ async def _ensure_offer(offers, *, host_id: str, spec: dict) -> bool:
         return False
     today = date.today()
     doc = {
-        "host_id": spec.get("host_id", host_id),
+        "host_id": host_id,
         "code": spec["code"],
         "type": spec["type"],
         "value": spec["value"],

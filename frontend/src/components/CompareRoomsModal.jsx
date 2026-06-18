@@ -207,7 +207,7 @@ export default function CompareRoomsModal({ open, onClose, rooms }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Compare rooms" size="lg">
-      <div style={{ overflowX: 'auto' }}>
+      <div className="compare-rooms-scroll">
         <table className="data-table compare-rooms-table">
           <thead>
             <tr>
@@ -224,14 +224,14 @@ export default function CompareRoomsModal({ open, onClose, rooms }) {
                   <FeatureLabel icon={row.icon}>{row.label}</FeatureLabel>
                 </td>
                 {rooms.map((r) => (
-                  <td key={`${r._id}-${row.label}`}>{row.render(r)}</td>
+                  <td key={`${r._id}-${row.label}`} data-label={r.title}>{row.render(r)}</td>
                 ))}
               </tr>
             ))}
             <tr>
               <td />
               {rooms.map((r) => (
-                <td key={`book-${r._id}`}>
+                <td key={`book-${r._id}`} data-label={r.title}>
                   <Link to={`/rooms/${r._id || r.id}`} className="btn btn-primary btn-sm" onClick={onClose}>
                     Book
                   </Link>
@@ -241,15 +241,6 @@ export default function CompareRoomsModal({ open, onClose, rooms }) {
           </tbody>
         </table>
       </div>
-      <style>{`
-        .compare-rooms-table td,
-        .compare-rooms-table th {
-          vertical-align: middle;
-        }
-        .compare-rooms-table tbody tr:hover {
-          background: var(--bg-secondary, rgba(0,0,0,0.03));
-        }
-      `}</style>
     </Modal>
   );
 }

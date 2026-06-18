@@ -196,7 +196,7 @@ export default function RoomImageCarousel({ photos = [], roomId = 'room', autoSc
           background: #fff;
           transform: scale(1.15);
         }
-        @media (max-width: 767px) {
+        @media (max-width: 768px) {
           .room-carousel {
             margin-bottom: 1.25rem;
           }

@@ -13,7 +13,7 @@ function useMonthsToShow() {
   const [count, setCount] = useState(2);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
-    const mq = window.matchMedia('(max-width: 767px)');
+    const mq = window.matchMedia('(max-width: 768px)');
     const update = () => setCount(mq.matches ? 1 : 2);
     update();
     mq.addEventListener('change', update);

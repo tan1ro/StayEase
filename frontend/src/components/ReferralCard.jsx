@@ -40,39 +40,6 @@ export default function ReferralCard({ code, credits = 0, referredCount = 0 }) {
         <div><strong>₹{credits}</strong><span>Credits earned</span></div>
         <div><strong>{referredCount}</strong><span>People referred</span></div>
       </div>
-      <style>{`
-        .referral-card { padding: 1.25rem; }
-        .referral-card h3 { margin-bottom: 1rem; }
-        .referral-card__row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 0.75rem;
-          margin-bottom: 0.75rem;
-          flex-wrap: wrap;
-        }
-        .referral-card__link {
-          font-size: 0.8rem;
-          color: var(--text-secondary);
-          word-break: break-all;
-        }
-        .referral-card__stats {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-top: 1rem;
-          padding-top: 1rem;
-          border-top: 1px solid var(--border);
-        }
-        .referral-card__stats div {
-          display: flex;
-          flex-direction: column;
-        }
-        .referral-card__stats span {
-          font-size: 0.8rem;
-          color: var(--text-secondary);
-        }
-      `}</style>
     </div>
   );
 }

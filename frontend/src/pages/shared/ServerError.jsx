@@ -15,19 +15,6 @@ export default function ServerError({ message, onRetry }) {
         )}
         <Link to="/" className="btn btn-outline">Go Home</Link>
       </div>
-      <style>{`
-        .error-page {
-          min-height: 60vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          gap: 0.75rem;
-          padding: 2rem;
-        }
-        .error-page__actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
-      `}</style>
     </div>
   );
 }

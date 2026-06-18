@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import CancellationPolicy from './CancellationPolicy';
 import DateRangePicker from './DateRangePicker';
+import AvailabilityCalendar from './AvailabilityCalendar';
+import PriceBreakdown from './PriceBreakdown';
 import { formatCurrency } from '../api/api';
 import { useRoomPricing } from '../hooks/useRoomPricing';
 import { nightsBetween } from '../utils/listingParams';
@@ -19,6 +21,7 @@ export default function BookingCard({
   const [checkIn, setCheckIn] = useState(initialCheckIn);
   const [checkOut, setCheckOut] = useState(initialCheckOut);
   const [guests, setGuests] = useState(initialGuests);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     setCheckIn(initialCheckIn);
@@ -75,17 +78,24 @@ export default function BookingCard({
         )}
 
         <div className="booking-widget__inputs">
-          <DateRangePicker
-            variant="booking"
-            start={checkIn}
-            end={checkOut}
-            onChange={({ start, end }) => {
-              setCheckIn(start);
-              setCheckOut(end);
-            }}
-            startLabel="Check-in"
-            endLabel="Checkout"
-          />
+          <div
+            onMouseEnter={() => setShowCalendar(true)}
+            onFocus={() => setShowCalendar(true)}
+          >
+            <DateRangePicker
+              variant="booking"
+              start={checkIn}
+              end={checkOut}
+              onChange={({ start, end }) => {
+                setCheckIn(start);
+                setCheckOut(end);
+                setShowCalendar(true);
+              }}
+              startLabel="Check-in"
+              endLabel="Checkout"
+            />
+          </div>
+          <AvailabilityCalendar roomId={roomId} open={showCalendar} />
           <label className="booking-widget__guests">
             <span className="booking-widget__label">Guests</span>
             <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">
@@ -98,6 +108,12 @@ export default function BookingCard({
             <ChevronDown size={16} className="booking-widget__chevron" />
           </label>
         </div>
+
+        {pricing && checkIn && checkOut && (
+          <div style={{ marginBottom: '0.75rem' }}>
+            <PriceBreakdown pricing={pricing} compact />
+          </div>
+        )}
 
         {previewMode ? (
           <p className="booking-widget__preview-note">Preview mode — booking is disabled</p>
