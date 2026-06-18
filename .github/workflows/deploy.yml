@@ -7,7 +7,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Deploy backend
         run: echo "Add your backend deployment command here (e.g. Railway, Render, EC2)"
       - name: Deploy frontend
