@@ -298,20 +298,20 @@ npm run dev
 
 | Role | Email | Password | Description |
 |------|-------|----------|-------------|
-| Guest | nandeesh@stayease.com | <demo-password> | Power user, many bookings |
-| Guest | priya@stayease.com | <demo-password> | New user with referral |
-| Guest | arjun@stayease.com | <demo-password> | Business traveller |
-| Guest | meera@stayease.com | <demo-password> | Frequent reviewer |
-| Guest | rahul@stayease.com | <demo-password> | Budget traveller |
-| Host | rajesh@stayease.com | <demo-password> | 12 rooms, Bangalore hotels |
-| Host | sunshine@stayease.com | <demo-password> | 10 rooms, Bangalore homestays |
-| Host | prestige@stayease.com | <demo-password> | 8 luxury suites and villas |
-| Host | budgethost@stayease.com | <demo-password> | 11 budget rooms and dorms |
-| Host | villahost@stayease.com | <demo-password> | 9 villas (Bangalore + Nandi Hills) |
-| Host | goahost@stayease.com | <demo-password> | 6 North Goa homestays and beach stays |
-| Host | mumbaihost@stayease.com | <demo-password> | 6 Mumbai city stays and dorms |
-| Host | coorghost@stayease.com | <demo-password> | 5 Coorg estate homestays |
-| Admin | admin@stayease.com | <demo-password> | Full access |
+| Guest | demo@example.com | <demo-password> | Power user, many bookings |
+| Guest | demo@example.com | <demo-password> | New user with referral |
+| Guest | demo@example.com | <demo-password> | Business traveller |
+| Guest | demo@example.com | <demo-password> | Frequent reviewer |
+| Guest | demo@example.com | <demo-password> | Budget traveller |
+| Host | demo@example.com | <demo-password> | 12 rooms, Bangalore hotels |
+| Host | demo@example.com | <demo-password> | 10 rooms, Bangalore homestays |
+| Host | demo@example.com | <demo-password> | 8 luxury suites and villas |
+| Host | demo@example.com | <demo-password> | 11 budget rooms and dorms |
+| Host | demo@example.com | <demo-password> | 9 villas (Bangalore + Nandi Hills) |
+| Host | demo@example.com | <demo-password> | 6 North Goa homestays and beach stays |
+| Host | demo@example.com | <demo-password> | 6 Mumbai city stays and dorms |
+| Host | demo@example.com | <demo-password> | 5 Coorg estate homestays |
+| Admin | demo@example.com | <demo-password> | Full access |
 
 Run `python seed.py` in the backend folder to load all demo data (14 users, 67 rooms, 80 bookings, reviews, offers, and more).
 
