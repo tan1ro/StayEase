@@ -298,20 +298,20 @@ npm run dev
 
 | Role | Email | Password | Description |
 |------|-------|----------|-------------|
-| Guest | nandeesh@stayease.com | Password1! | Power user, many bookings |
-| Guest | priya@stayease.com | Password1! | New user with referral |
-| Guest | arjun@stayease.com | Password1! | Business traveller |
-| Guest | meera@stayease.com | Password1! | Frequent reviewer |
-| Guest | rahul@stayease.com | Password1! | Budget traveller |
-| Host | rajesh@stayease.com | Password1! | 12 rooms, Bangalore hotels |
-| Host | sunshine@stayease.com | Password1! | 10 rooms, Bangalore homestays |
-| Host | prestige@stayease.com | Password1! | 8 luxury suites and villas |
-| Host | budgethost@stayease.com | Password1! | 11 budget rooms and dorms |
-| Host | villahost@stayease.com | Password1! | 9 villas (Bangalore + Nandi Hills) |
-| Host | goahost@stayease.com | Password1! | 6 North Goa homestays and beach stays |
-| Host | mumbaihost@stayease.com | Password1! | 6 Mumbai city stays and dorms |
-| Host | coorghost@stayease.com | Password1! | 5 Coorg estate homestays |
-| Admin | admin@stayease.com | Password1! | Full access |
+| Guest | nandeesh@stayease.com | <demo-password> | Power user, many bookings |
+| Guest | priya@stayease.com | <demo-password> | New user with referral |
+| Guest | arjun@stayease.com | <demo-password> | Business traveller |
+| Guest | meera@stayease.com | <demo-password> | Frequent reviewer |
+| Guest | rahul@stayease.com | <demo-password> | Budget traveller |
+| Host | rajesh@stayease.com | <demo-password> | 12 rooms, Bangalore hotels |
+| Host | sunshine@stayease.com | <demo-password> | 10 rooms, Bangalore homestays |
+| Host | prestige@stayease.com | <demo-password> | 8 luxury suites and villas |
+| Host | budgethost@stayease.com | <demo-password> | 11 budget rooms and dorms |
+| Host | villahost@stayease.com | <demo-password> | 9 villas (Bangalore + Nandi Hills) |
+| Host | goahost@stayease.com | <demo-password> | 6 North Goa homestays and beach stays |
+| Host | mumbaihost@stayease.com | <demo-password> | 6 Mumbai city stays and dorms |
+| Host | coorghost@stayease.com | <demo-password> | 5 Coorg estate homestays |
+| Admin | admin@stayease.com | <demo-password> | Full access |
 
 Run `python seed.py` in the backend folder to load all demo data (14 users, 67 rooms, 80 bookings, reviews, offers, and more).
 
